@@ -22,6 +22,15 @@ class ApiClient {
       dio.options.baseUrl.replaceFirst(RegExp(r'^http'), 'ws');
 }
 
-/// Default backend location for local development.
-/// Android emulator maps 10.0.2.2 to the host machine's localhost.
-const kDevBaseUrl = 'http://10.0.2.2:8000';
+/// Backend base URL, resolved at build time (RNF-006: no secrets/endpoints
+/// baked in as mutable app state — this is a compile-time constant, not a
+/// runtime-editable setting).
+///
+/// Override with `--dart-define=API_BASE_URL=https://api.example.com` when
+/// building for a real deployment. Defaults to the Android emulator's alias
+/// for the host machine's localhost, which is only reachable in local
+/// development.
+const kApiBaseUrl = String.fromEnvironment(
+  'API_BASE_URL',
+  defaultValue: 'http://10.0.2.2:8000',
+);

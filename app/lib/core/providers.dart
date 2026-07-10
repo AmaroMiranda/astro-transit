@@ -12,7 +12,7 @@ import '../features/predictions/data/prediction_repository.dart';
 import '../shared/models/observer_location.dart';
 
 final apiClientProvider = Provider<ApiClient>((ref) {
-  return ApiClient(baseUrl: kDevBaseUrl);
+  return ApiClient(baseUrl: kApiBaseUrl);
 });
 
 final predictionRepositoryProvider = Provider<PredictionRepository>((ref) {

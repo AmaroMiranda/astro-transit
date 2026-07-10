@@ -99,6 +99,46 @@ flutter analyze
 Estado gerenciado com Riverpod (sem geração de código); navegação com go_router;
 modelos compartilhados em `shared/models/` espelham os schemas do backend.
 
+### Configurando o backend em build de release
+
+A URL do backend é resolvida em tempo de build (`kApiBaseUrl` em
+`core/network/api_client.dart`), nunca hardcoded como segredo em runtime.
+Por padrão aponta para `http://10.0.2.2:8000` (alias do emulador Android
+para o localhost da máquina host — só funciona em desenvolvimento local).
+Para um backend real, defina no build:
+
+```bash
+flutter build apk --release --dart-define=API_BASE_URL=https://sua-api.exemplo.com
+```
+
+### Gerando o ícone do app
+
+O ícone (`assets/icon/app_icon.png`, 1024×1024) foi renderizado a partir do
+SVG em `assets/logo/astrotransit_icon.svg`. Para regenerar os mipmaps/AppIcon
+após alterar a arte-fonte:
+
+```bash
+cd app
+dart run flutter_launcher_icons
+```
+
+## Contribuindo
+
+Mudanças na geometria de previsão (separação angular, projeção de trajetória,
+detecção de trânsito) precisam vir acompanhadas de teste automatizado — é
+matemática crítica e regressões silenciosas são fáceis de introduzir. PRs que
+mexem em `backend/app/geometry` ou `backend/app/prediction` sem testes novos
+vão receber pedido de testes.
+
+## Licença
+
+Copyright 2026 Amaro Miranda
+
+Licenciado sob a [Apache License 2.0](LICENSE).
+
+Este projeto usa Skyfield (MIT) para efemérides astronômicas e FastAPI (MIT)
+no backend, cada qual sob sua própria licença.
+
 ---
 
 <sub>Feito com atenção às limitações reais do ADS-B: previsões são apresentadas como
