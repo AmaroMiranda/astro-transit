@@ -37,7 +37,7 @@ Consulte a [SPEC completa](docs/SPEC.md) para requisitos, roadmap e decisões.
 | 2 — Backend | Provedores ADS-B, cache, previsão, confiança, WebSocket | ✅ (53 testes) |
 | 3 — Flutter MVP | Onboarding, localização, radar, previsão, contagem, histórico | ✅ (validado no emulador Android) |
 | 4 — Mapa e faixa | Faixa geográfica, linha central, deslocamento | ✅ |
-| 5 — Câmera | Preview, overlay, calibração, gravação | ⬜ |
+| 5 — Câmera | Preview, overlay, calibração, gravação | ✅ |
 
 ## Backend — desenvolvimento
 
@@ -94,6 +94,7 @@ flutter analyze
 | `history/` | Histórico local persistido (SharedPreferences) | RF-028 |
 | `settings/` | Tema (escuro/claro/vermelho), astros monitorados, raio de busca | RF-002/004, seção 15.2 |
 | `map/` | Mapa (flutter_map/OSM) com posição do observador, faixa e linha central do trânsito | RF-014/021 |
+| `camera/` | Preview com overlay (círculos perfeitos independentes da proporção), calibração de FOV, gravação, aviso solar obrigatório | RF-022/024/027, seção 17 |
 
 Estado gerenciado com Riverpod (sem geração de código); navegação com go_router;
 modelos compartilhados em `shared/models/` espelham os schemas do backend.

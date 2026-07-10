@@ -53,6 +53,9 @@ dependencies:
   flutter_map: ^7.0.2
   latlong2: ^0.9.1
 
+  # Camera overlay (RF-022, RF-024, RF-027)
+  camera: ^0.11.0+2
+
   # Local persistence (settings, favorites, history — RF-028/029)
   shared_preferences: ^2.3.3
 

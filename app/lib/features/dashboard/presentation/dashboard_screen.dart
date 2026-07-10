@@ -28,6 +28,10 @@ class DashboardScreen extends ConsumerWidget {
         title: const Text('AstroTransit'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.camera_alt_outlined),
+            onPressed: () => context.push('/camera'),
+          ),
+          IconButton(
             icon: const Icon(Icons.settings_outlined),
             onPressed: () => context.push('/settings'),
           ),

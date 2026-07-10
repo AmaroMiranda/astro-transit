@@ -1,8 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/camera/presentation/camera_screen.dart';
 import '../features/dashboard/presentation/dashboard_screen.dart';
-import '../features/dashboard/presentation/placeholder_screen.dart';
 import '../features/history/presentation/history_screen.dart';
 import '../features/live_tracking/presentation/live_tracking_screen.dart';
 import '../features/map/presentation/map_screen.dart';
@@ -43,13 +43,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const SettingsScreen(),
       ),
       GoRoute(path: '/map', builder: (context, state) => const MapScreen()),
-      GoRoute(
-        path: '/camera',
-        builder: (context, state) => const PlaceholderScreen(
-          title: 'Câmera',
-          message: 'Overlay de câmera chega na etapa seguinte.',
-        ),
-      ),
+      GoRoute(path: '/camera', builder: (context, state) => const CameraScreen()),
     ],
   );
 });

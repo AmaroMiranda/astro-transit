@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/camera/camera_calibration.dart';
 import 'core/design_system/app_theme.dart';
 import 'core/onboarding_state.dart';
 import 'core/providers.dart';
@@ -10,6 +11,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final container = ProviderContainer();
   await bootstrapOnboardingState(container);
+  await bootstrapCameraCalibration(container);
 
   runApp(
     UncontrolledProviderScope(
