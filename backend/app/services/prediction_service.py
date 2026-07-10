@@ -1,0 +1,169 @@
+"""Transit prediction orchestration (SPEC section 10, steps 1-16).
+
+Wires together astronomy, providers, geometry, prediction and confidence into a single
+call. Pre-filtering (SPEC section 11.1) discards aircraft that cannot possibly produce
+a transit before the expensive per-aircraft refinement runs.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Optional
+
+from app.astronomy.ephemeris import EphemerisService
+from app.confidence.scoring import (
+    ConfidenceInputs,
+    ConfidenceResult,
+    score_candidate,
+)
+from app.domain.models import (
+    AircraftState,
+    CelestialBody,
+    CelestialPosition,
+    ObserverLocation,
+    TransitCandidate,
+)
+from app.geometry.angles import angular_separation_deg
+from app.geometry.coordinates import observer_relative
+from app.prediction.projection import project_state
+from app.prediction.transit import find_transit_candidate
+from app.providers.registry import AircraftFetchResult, ProviderRegistry
+
+# Pre-filter: keep aircraft whose current OR near-future line of sight is within this
+# angular window of the body. A fast, generous gate before the exact search.
+_PREFILTER_CONE_DEG = 8.0
+_PREFILTER_LOOKAHEAD_S = (0.0, 30.0, 60.0, 120.0)
+
+
+@dataclass(frozen=True)
+class TransitPrediction:
+    candidate: TransitCandidate
+    confidence: ConfidenceResult
+    callsign: Optional[str]
+    aircraft_distance_m: float
+    data_age_s: float
+
+
+@dataclass(frozen=True)
+class PredictionResponse:
+    observer: ObserverLocation
+    generated_at_utc: datetime
+    bodies: list[CelestialPosition]
+    predictions: list[TransitPrediction]
+    provider_name: str
+    data_degraded: bool
+    aircraft_considered: int
+
+
+class PredictionService:
+    def __init__(self, ephemeris: EphemerisService, registry: ProviderRegistry):
+        self._ephemeris = ephemeris
+        self._registry = registry
+
+    def _passes_prefilter(
+        self, state: AircraftState, body: CelestialPosition, observer: ObserverLocation
+    ) -> bool:
+        """Cheap angular gate over a few look-ahead samples (SPEC 11.1)."""
+        if state.on_ground:
+            return False
+        for t in _PREFILTER_LOOKAHEAD_S:
+            projected = project_state(state, t)
+            topo = observer_relative(
+                projected.latitude_deg,
+                projected.longitude_deg,
+                projected.altitude_m,
+                observer,
+            )
+            if topo.altitude_deg <= 0.0:
+                continue
+            sep = angular_separation_deg(
+                topo.azimuth_deg, topo.altitude_deg, body.azimuth_deg, body.altitude_deg
+            )
+            if sep <= _PREFILTER_CONE_DEG:
+                return True
+        return False
+
+    async def predict(
+        self,
+        observer: ObserverLocation,
+        targets: list[CelestialBody],
+        horizon_s: float = 120.0,
+        radius_km: float = 80.0,
+        when: Optional[datetime] = None,
+    ) -> PredictionResponse:
+        when = when or datetime.now(timezone.utc)
+
+        # Steps 3: body positions.
+        bodies = [
+            self._ephemeris.position(body, observer, when) for body in targets
+        ]
+        visible_bodies = [b for b in bodies if b.altitude_deg > 0.0]
+
+        # Step 4: fetch aircraft (with failover + cache).
+        fetch: AircraftFetchResult = await self._registry.get_aircraft_near(
+            observer.latitude_deg, observer.longitude_deg, radius_km
+        )
+
+        predictions: list[TransitPrediction] = []
+        considered = 0
+
+        for state in fetch.aircraft:
+            data_age = max(state.age_seconds, fetch.age_seconds)
+            for body in visible_bodies:
+                # Steps 7: pre-filter.
+                if not self._passes_prefilter(state, body, observer):
+                    continue
+                considered += 1
+                # Steps 8-13: exact candidate search + refinement.
+                candidate = find_transit_candidate(
+                    state, body, observer, horizon_s=horizon_s
+                )
+                if candidate is None or not candidate.is_transit:
+                    continue
+
+                # Distance to the aircraft at closest approach, for confidence.
+                projected = project_state(state, candidate.time_to_transit_s)
+                topo = observer_relative(
+                    projected.latitude_deg,
+                    projected.longitude_deg,
+                    projected.altitude_m,
+                    observer,
+                )
+
+                # Steps 15: confidence.
+                confidence = score_candidate(
+                    candidate,
+                    ConfidenceInputs(
+                        data_age_s=data_age,
+                        from_cache=fetch.from_cache,
+                        degraded=fetch.degraded,
+                        aircraft_distance_m=topo.range_m,
+                        gps_accuracy_m=observer.horizontal_accuracy_m,
+                        track_points=1,
+                    ),
+                )
+                predictions.append(
+                    TransitPrediction(
+                        candidate=candidate,
+                        confidence=confidence,
+                        callsign=state.callsign,
+                        aircraft_distance_m=topo.range_m,
+                        data_age_s=data_age,
+                    )
+                )
+
+        # Soonest, most-confident first.
+        predictions.sort(
+            key=lambda p: (p.candidate.time_to_transit_s, -p.confidence.score)
+        )
+
+        return PredictionResponse(
+            observer=observer,
+            generated_at_utc=when,
+            bodies=bodies,
+            predictions=predictions,
+            provider_name=fetch.provider_name,
+            data_degraded=fetch.degraded,
+            aircraft_considered=considered,
+        )

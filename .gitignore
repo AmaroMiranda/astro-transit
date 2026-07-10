@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.mypy_cache/
+
+# Ephemeris / large data (downloaded at runtime)
+backend/app/astronomy/_data/
+*.bsp
+
+# Environment
+.env
+.env.*
+
+# Flutter / Dart
+app/.dart_tool/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/build/
+app/.idea/
+app/android/.gradle/
+app/**/GeneratedPluginRegistrant.*
+*.iml
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/

@@ -1,0 +1,80 @@
+<svg width="880" height="260" viewBox="0 0 880 260" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AstroTransit">
+  <defs>
+    <radialGradient id="hmoon" cx="40%" cy="36%" r="72%">
+      <stop offset="0%" stop-color="#fdfbf3"/>
+      <stop offset="45%" stop-color="#f4eeda"/>
+      <stop offset="78%" stop-color="#dcd2b6"/>
+      <stop offset="100%" stop-color="#b9ad8c"/>
+    </radialGradient>
+    <radialGradient id="hglow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#f5f0dc" stop-opacity="0.5"/>
+      <stop offset="55%" stop-color="#e8e0c0" stop-opacity="0.14"/>
+      <stop offset="100%" stop-color="#e8e0c0" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="hshade" cx="34%" cy="30%" r="88%">
+      <stop offset="0%" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="72%" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#3a3320" stop-opacity="0.32"/>
+    </radialGradient>
+    <clipPath id="hmoonClip"><circle cx="130" cy="130" r="92"/></clipPath>
+    <linearGradient id="harc" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#5ec2ff" stop-opacity="0"/>
+      <stop offset="60%" stop-color="#5ec2ff" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#8be0ff" stop-opacity="0.95"/>
+    </linearGradient>
+    <linearGradient id="hplane" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0b1020"/>
+      <stop offset="100%" stop-color="#1a2338"/>
+    </linearGradient>
+    <linearGradient id="wordAstro" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#cdd8f0"/>
+    </linearGradient>
+    <linearGradient id="wordTransit" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#8be0ff"/>
+      <stop offset="100%" stop-color="#4aa8ec"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Icon mark -->
+  <g>
+    <circle cx="130" cy="130" r="120" fill="url(#hglow)"/>
+    <circle cx="130" cy="130" r="92" fill="url(#hmoon)"/>
+    <g clip-path="url(#hmoonClip)">
+      <g fill="#c8bd9c" opacity="0.55">
+        <circle cx="99" cy="99" r="15"/>
+        <circle cx="158" cy="86" r="9"/>
+        <circle cx="176" cy="141" r="18"/>
+        <circle cx="106" cy="178" r="11"/>
+        <circle cx="146" cy="188" r="6"/>
+      </g>
+      <g fill="#fbf7e8" opacity="0.5">
+        <circle cx="96" cy="96" r="15"/>
+        <circle cx="155" cy="83" r="9"/>
+        <circle cx="173" cy="137" r="18"/>
+      </g>
+      <circle cx="130" cy="130" r="92" fill="url(#hshade)"/>
+    </g>
+    <path d="M 34 196 Q 118 128 236 96" stroke="url(#harc)" stroke-width="4.5" stroke-linecap="round" fill="none" opacity="0.9"/>
+    <g transform="translate(130 130) rotate(-28) scale(0.62)">
+      <ellipse cx="0" cy="0" rx="86" ry="30" fill="#fcf8ea" opacity="0.35"/>
+      <g fill="url(#hplane)" stroke="#000000" stroke-opacity="0.25" stroke-width="1.5">
+        <path d="M -78 0 C -78 -8, -60 -12, -30 -12 L 44 -11 C 62 -11, 78 -6, 84 0 C 78 6, 62 11, 44 11 L -30 12 C -60 12, -78 8, -78 0 Z"/>
+        <path d="M 6 -9 L -34 -78 L -14 -78 L 30 -8 Z"/>
+        <path d="M 6 9 L -34 78 L -14 78 L 30 8 Z"/>
+        <path d="M -64 -6 L -86 -34 L -74 -34 L -54 -5 Z"/>
+        <path d="M -64 6 L -86 34 L -74 34 L -54 5 Z"/>
+        <path d="M -72 0 L -92 -3 L -92 3 Z"/>
+      </g>
+      <circle cx="70" cy="0" r="3.5" fill="#5ec2ff" opacity="0.85"/>
+    </g>
+  </g>
+
+  <!-- Wordmark -->
+  <g font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-weight="700">
+    <text x="288" y="150" font-size="72" letter-spacing="-1">
+      <tspan fill="url(#wordAstro)">Astro</tspan><tspan fill="url(#wordTransit)">Transit</tspan>
+    </text>
+    <text x="290" y="190" font-size="23" letter-spacing="7" fill="#7f8db0" font-weight="500">TRÂNSITOS SOLARES E LUNARES</text>
+  </g>
+</svg>
