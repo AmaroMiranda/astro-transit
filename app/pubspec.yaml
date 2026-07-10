@@ -49,6 +49,10 @@ dependencies:
   geolocator: ^13.0.2
   sensors_plus: ^6.1.1
 
+  # Map (RF-021)
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
+
   # Local persistence (settings, favorites, history — RF-028/029)
   shared_preferences: ^2.3.3
 

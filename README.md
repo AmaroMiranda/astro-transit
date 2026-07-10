@@ -36,7 +36,7 @@ Consulte a [SPEC completa](docs/SPEC.md) para requisitos, roadmap e decisões.
 | 1 — Núcleo matemático | Posição solar/lunar, ECEF/ENU, projeção, separação angular, trânsito | ✅ (33 testes) |
 | 2 — Backend | Provedores ADS-B, cache, previsão, confiança, WebSocket | ✅ (53 testes) |
 | 3 — Flutter MVP | Onboarding, localização, radar, previsão, contagem, histórico | ✅ (validado no emulador Android) |
-| 4 — Mapa e faixa | Faixa geográfica, linha central, deslocamento | ⬜ |
+| 4 — Mapa e faixa | Faixa geográfica, linha central, deslocamento | ✅ |
 | 5 — Câmera | Preview, overlay, calibração, gravação | ⬜ |
 
 ## Backend — desenvolvimento
@@ -73,6 +73,7 @@ uma vez e mantida localmente em `app/astronomy/_data/`.
 | `confidence/scoring.py` | Pontuação de confiança 0-100 com fatores | RF-016 |
 | `services/prediction_service.py` | Orquestra pré-filtro → candidatos → confiança | seção 10 |
 | `api/v1/*.py` | `GET /v1/astronomy/position`, `GET /v1/aircraft/nearby`, `POST /v1/transits/predict`, `WS /v1/transits/live` | seção 14 |
+| `geometry/corridor.py` | Faixa geográfica do trânsito: linha central, largura, distância/direção do observador | RF-014 |
 
 ## App Flutter (MVP)
 
@@ -92,6 +93,7 @@ flutter analyze
 | `live_tracking/` | Contagem regressiva ao vivo via WebSocket, UI reduzida nos segundos finais | RF-018, seção 16.5/16.6 |
 | `history/` | Histórico local persistido (SharedPreferences) | RF-028 |
 | `settings/` | Tema (escuro/claro/vermelho), astros monitorados, raio de busca | RF-002/004, seção 15.2 |
+| `map/` | Mapa (flutter_map/OSM) com posição do observador, faixa e linha central do trânsito | RF-014/021 |
 
 Estado gerenciado com Riverpod (sem geração de código); navegação com go_router;
 modelos compartilhados em `shared/models/` espelham os schemas do backend.

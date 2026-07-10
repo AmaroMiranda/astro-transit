@@ -5,6 +5,7 @@ import '../features/dashboard/presentation/dashboard_screen.dart';
 import '../features/dashboard/presentation/placeholder_screen.dart';
 import '../features/history/presentation/history_screen.dart';
 import '../features/live_tracking/presentation/live_tracking_screen.dart';
+import '../features/map/presentation/map_screen.dart';
 import '../features/onboarding/presentation/onboarding_screen.dart';
 import '../features/radar/presentation/radar_screen.dart';
 import '../features/settings/presentation/settings_screen.dart';
@@ -41,14 +42,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/settings',
         builder: (context, state) => const SettingsScreen(),
       ),
-      GoRoute(
-        path: '/map',
-        builder: (context, state) => const PlaceholderScreen(
-          title: 'Mapa',
-          message:
-              'Mapa e faixa geográfica do trânsito chegam na próxima etapa.',
-        ),
-      ),
+      GoRoute(path: '/map', builder: (context, state) => const MapScreen()),
       GoRoute(
         path: '/camera',
         builder: (context, state) => const PlaceholderScreen(

@@ -114,12 +114,31 @@ class TransitCandidateOut(BaseModel):
         )
 
 
+class CorridorOut(BaseModel):
+    center_latitude: float
+    center_longitude: float
+    half_width_m: float
+    distance_from_observer_m: float
+    bearing_from_observer_deg: float
+
+    @classmethod
+    def of(cls, c) -> "CorridorOut":
+        return cls(
+            center_latitude=round(c.center_lat_deg, 6),
+            center_longitude=round(c.center_lon_deg, 6),
+            half_width_m=round(c.half_width_m, 1),
+            distance_from_observer_m=round(c.distance_from_observer_m, 1),
+            bearing_from_observer_deg=round(c.bearing_from_observer_deg, 1),
+        )
+
+
 class TransitPredictionOut(BaseModel):
     candidate: TransitCandidateOut
     confidence: ConfidenceOut
     callsign: Optional[str]
     aircraft_distance_m: float
     data_age_s: float
+    corridor: Optional[CorridorOut] = None
 
     @classmethod
     def of(cls, p: TransitPrediction) -> "TransitPredictionOut":
@@ -129,6 +148,7 @@ class TransitPredictionOut(BaseModel):
             callsign=p.callsign,
             aircraft_distance_m=round(p.aircraft_distance_m, 1),
             data_age_s=round(p.data_age_s, 1),
+            corridor=CorridorOut.of(p.corridor) if p.corridor else None,
         )
 
 

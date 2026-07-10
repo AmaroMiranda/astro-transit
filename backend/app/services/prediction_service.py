@@ -26,6 +26,7 @@ from app.domain.models import (
 )
 from app.geometry.angles import angular_separation_deg
 from app.geometry.coordinates import observer_relative
+from app.geometry.corridor import CorridorEstimate, estimate_corridor
 from app.prediction.projection import project_state
 from app.prediction.transit import find_transit_candidate
 from app.providers.registry import AircraftFetchResult, ProviderRegistry
@@ -35,6 +36,10 @@ from app.providers.registry import AircraftFetchResult, ProviderRegistry
 _PREFILTER_CONE_DEG = 8.0
 _PREFILTER_LOOKAHEAD_S = (0.0, 30.0, 60.0, 120.0)
 
+# Margin used both for transit detection (matches prediction.transit default) and
+# for sizing the geographic corridor around the central line (RF-014).
+_CORRIDOR_MARGIN_DEG = 0.05
+
 
 @dataclass(frozen=True)
 class TransitPrediction:
@@ -43,6 +48,7 @@ class TransitPrediction:
     callsign: Optional[str]
     aircraft_distance_m: float
     data_age_s: float
+    corridor: Optional[CorridorEstimate] = None
 
 
 @dataclass(frozen=True)
@@ -143,6 +149,24 @@ class PredictionService:
                         track_points=1,
                     ),
                 )
+
+                # Step 13: geographic corridor (RF-014), best-effort — skip
+                # rather than fail the whole prediction if the geometry is
+                # degenerate (e.g. body essentially on the horizon).
+                corridor = None
+                try:
+                    corridor = estimate_corridor(
+                        observer,
+                        body,
+                        aircraft_lat_deg=projected.latitude_deg,
+                        aircraft_lon_deg=projected.longitude_deg,
+                        aircraft_altitude_m=projected.altitude_m,
+                        aircraft_radius_deg=candidate.aircraft_radius_deg,
+                        margin_deg=_CORRIDOR_MARGIN_DEG,
+                    )
+                except (ValueError, ZeroDivisionError):
+                    pass
+
                 predictions.append(
                     TransitPrediction(
                         candidate=candidate,
@@ -150,6 +174,7 @@ class PredictionService:
                         callsign=state.callsign,
                         aircraft_distance_m=topo.range_m,
                         data_age_s=data_age,
+                        corridor=corridor,
                     )
                 )
 

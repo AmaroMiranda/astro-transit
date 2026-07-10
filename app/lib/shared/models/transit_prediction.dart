@@ -152,12 +152,39 @@ class TransitCandidate {
   }
 }
 
+class TransitCorridor {
+  final double centerLatitude;
+  final double centerLongitude;
+  final double halfWidthM;
+  final double distanceFromObserverM;
+  final double bearingFromObserverDeg;
+
+  const TransitCorridor({
+    required this.centerLatitude,
+    required this.centerLongitude,
+    required this.halfWidthM,
+    required this.distanceFromObserverM,
+    required this.bearingFromObserverDeg,
+  });
+
+  factory TransitCorridor.fromJson(Map<String, dynamic> json) {
+    return TransitCorridor(
+      centerLatitude: (json['center_latitude'] as num).toDouble(),
+      centerLongitude: (json['center_longitude'] as num).toDouble(),
+      halfWidthM: (json['half_width_m'] as num).toDouble(),
+      distanceFromObserverM: (json['distance_from_observer_m'] as num).toDouble(),
+      bearingFromObserverDeg: (json['bearing_from_observer_deg'] as num).toDouble(),
+    );
+  }
+}
+
 class TransitPrediction {
   final TransitCandidate candidate;
   final Confidence confidence;
   final String? callsign;
   final double aircraftDistanceM;
   final double dataAgeS;
+  final TransitCorridor? corridor;
 
   const TransitPrediction({
     required this.candidate,
@@ -165,9 +192,11 @@ class TransitPrediction {
     required this.aircraftDistanceM,
     required this.dataAgeS,
     this.callsign,
+    this.corridor,
   });
 
   factory TransitPrediction.fromJson(Map<String, dynamic> json) {
+    final rawCorridor = json['corridor'] as Map<String, dynamic>?;
     return TransitPrediction(
       candidate:
           TransitCandidate.fromJson(json['candidate'] as Map<String, dynamic>),
@@ -176,6 +205,7 @@ class TransitPrediction {
       callsign: json['callsign'] as String?,
       aircraftDistanceM: (json['aircraft_distance_m'] as num).toDouble(),
       dataAgeS: (json['data_age_s'] as num).toDouble(),
+      corridor: rawCorridor != null ? TransitCorridor.fromJson(rawCorridor) : null,
     );
   }
 }
