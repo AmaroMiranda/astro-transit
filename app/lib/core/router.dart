@@ -42,7 +42,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/settings',
         builder: (context, state) => const SettingsScreen(),
       ),
-      GoRoute(path: '/map', builder: (context, state) => const MapScreen()),
+      GoRoute(
+        path: '/map',
+        builder: (context, state) => MapScreen(
+          initialPickMode:
+              state.uri.queryParameters['pickLocation'] == 'true',
+        ),
+      ),
       GoRoute(path: '/camera', builder: (context, state) => const CameraScreen()),
     ],
   );

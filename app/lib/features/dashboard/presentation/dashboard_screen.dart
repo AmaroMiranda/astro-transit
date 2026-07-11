@@ -28,7 +28,7 @@ class DashboardScreen extends ConsumerStatefulWidget {
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   bool _locating = false;
-  String? _locationError;
+  LocationRefreshError? _locationError;
 
   @override
   void initState() {
@@ -41,8 +41,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Future<void> _search() async {
     if (_locating) return;
     setState(() => _locating = true);
-    final error =
-        await ref.read(observerLocationProvider.notifier).tryRefresh();
+    final controller = ref.read(observerLocationProvider.notifier);
+    // A manually-chosen point (picked on the map) must not be silently
+    // clobbered by a background GPS refresh.
+    final error = controller.isManual ? null : await controller.tryRefresh();
     if (!mounted) return;
     setState(() {
       _locationError = error;
@@ -53,6 +55,20 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     }
   }
 
+  Future<void> _handleErrorAction(LocationRefreshError error) async {
+    final service = ref.read(locationServiceProvider);
+    switch (error.action) {
+      case LocationErrorAction.openLocationSettings:
+        await service.openLocationSettings();
+      case LocationErrorAction.openAppSettings:
+        await service.openAppSettings();
+      case LocationErrorAction.retry:
+      case LocationErrorAction.none:
+        break;
+    }
+    await _search();
+  }
+
   @override
   Widget build(BuildContext context) {
     final observer = ref.watch(observerLocationProvider);
@@ -60,7 +76,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final busy = _locating || predictionAsync.isLoading;
 
     return Scaffold(
-      body: RefreshIndicator(
+      body: SafeArea(
+        top: false, // the gradient header paints into the status bar itself
+        child: RefreshIndicator(
         onRefresh: _search,
         child: ListView(
           padding: EdgeInsets.zero,
@@ -101,6 +119,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ),
           ],
         ),
+        ),
       ),
     );
   }
@@ -110,14 +129,23 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     AsyncValue<PredictionResponse?> predictionAsync,
   ) {
     if (_locationError != null) {
+      final error = _locationError!;
+      final actionLabel = switch (error.action) {
+        LocationErrorAction.openLocationSettings => 'Ativar localização',
+        LocationErrorAction.openAppSettings => 'Abrir configurações',
+        LocationErrorAction.retry => 'Tentar novamente',
+        LocationErrorAction.none => null,
+      };
       return [
         _MessageCard(
           icon: Icons.location_off_outlined,
           iconColor: AstroColors.warning,
           title: 'Localização indisponível',
-          message: _locationError!,
-          actionLabel: 'Tentar novamente',
-          onAction: _search,
+          message: error.message,
+          actionLabel: actionLabel,
+          onAction: actionLabel == null ? null : () => _handleErrorAction(error),
+          secondaryActionLabel: 'Escolher no mapa',
+          onSecondaryAction: () => context.push('/map?pickLocation=true'),
         ),
       ];
     }
@@ -301,6 +329,8 @@ class _MessageCard extends StatelessWidget {
   final String message;
   final String? actionLabel;
   final VoidCallback? onAction;
+  final String? secondaryActionLabel;
+  final VoidCallback? onSecondaryAction;
   final bool showProgress;
 
   const _MessageCard({
@@ -310,6 +340,8 @@ class _MessageCard extends StatelessWidget {
     required this.message,
     this.actionLabel,
     this.onAction,
+    this.secondaryActionLabel,
+    this.onSecondaryAction,
     this.showProgress = false,
   });
 
@@ -351,9 +383,21 @@ class _MessageCard extends StatelessWidget {
               style: theme.textTheme.bodyMedium
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
-            if (actionLabel != null) ...[
+            if (actionLabel != null || secondaryActionLabel != null) ...[
               const SizedBox(height: 16),
-              OutlinedButton(onPressed: onAction, child: Text(actionLabel!)),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (actionLabel != null)
+                    OutlinedButton(
+                        onPressed: onAction, child: Text(actionLabel!)),
+                  if (secondaryActionLabel != null)
+                    TextButton(
+                        onPressed: onSecondaryAction,
+                        child: Text(secondaryActionLabel!)),
+                ],
+              ),
             ],
           ],
         ),

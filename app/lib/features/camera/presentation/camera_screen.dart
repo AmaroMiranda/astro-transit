@@ -189,16 +189,20 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
             ),
           ),
           Positioned(
-            bottom: 32,
+            bottom: 0,
             left: 0,
             right: 0,
-            child: Center(
-              child: FloatingActionButton(
-                backgroundColor: _isRecording ? AstroColors.error : Colors.white,
-                onPressed: _toggleRecording,
-                child: Icon(
-                  _isRecording ? Icons.stop : Icons.fiber_manual_record,
-                  color: _isRecording ? Colors.white : Colors.red,
+            child: SafeArea(
+              minimum: const EdgeInsets.only(bottom: 24),
+              child: Center(
+                child: FloatingActionButton(
+                  backgroundColor:
+                      _isRecording ? AstroColors.error : Colors.white,
+                  onPressed: _toggleRecording,
+                  child: Icon(
+                    _isRecording ? Icons.stop : Icons.fiber_manual_record,
+                    color: _isRecording ? Colors.white : Colors.red,
+                  ),
                 ),
               ),
             ),

@@ -30,36 +30,81 @@ final observerLocationProvider =
   (ref) => ObserverLocationController(ref.watch(locationServiceProvider)),
 );
 
+/// What went wrong fetching a location, and what — if anything — the user
+/// can do about it right now (SPEC section 18: errors should offer a way
+/// forward, not just a diagnosis).
+enum LocationErrorAction { openLocationSettings, openAppSettings, retry, none }
+
+class LocationRefreshError {
+  final String message;
+  final LocationErrorAction action;
+
+  const LocationRefreshError({required this.message, required this.action});
+}
+
 class ObserverLocationController extends StateNotifier<ObserverLocation?> {
   final LocationService _service;
+
+  /// True once the user has explicitly picked a point on the map — in that
+  /// mode, automatic GPS refreshes (e.g. on next app open) must not silently
+  /// overwrite the chosen point.
+  bool isManual = false;
 
   ObserverLocationController(this._service) : super(null);
 
   Future<void> refresh() async {
     state = await _service.currentLocation();
+    isManual = false;
   }
 
-  /// Like [refresh], but never throws: returns a user-facing error message on
+  /// Like [refresh], but never throws: returns a user-facing error on
   /// failure (null on success). This is what UI callers should use — the
   /// throwing variant in a bare `onPressed` was an unhandled async exception
   /// waiting to happen.
-  Future<String?> tryRefresh() async {
+  Future<LocationRefreshError?> tryRefresh() async {
     try {
       state = await _service.currentLocation();
+      isManual = false;
       return null;
     } on LocationPermissionDenied {
-      return 'Permissão de localização negada. Conceda o acesso nas '
-          'configurações do aparelho para buscar trânsitos.';
+      return const LocationRefreshError(
+        message: 'Permissão de localização negada. Conceda o acesso para '
+            'buscar trânsitos a partir da sua posição — ou escolha um ponto '
+            'manualmente no mapa.',
+        action: LocationErrorAction.retry,
+      );
+    } on LocationPermissionDeniedForever {
+      return const LocationRefreshError(
+        message: 'A permissão de localização foi negada permanentemente. '
+            'Ative-a nas configurações do aplicativo, ou escolha um ponto '
+            'manualmente no mapa.',
+        action: LocationErrorAction.openAppSettings,
+      );
     } on LocationServiceDisabled {
-      return 'A localização do aparelho está desativada. Ative o GPS e '
-          'tente novamente.';
+      return const LocationRefreshError(
+        message: 'A localização do aparelho está desativada. Ative o GPS '
+            'para buscar a partir da sua posição.',
+        action: LocationErrorAction.openLocationSettings,
+      );
+    } on LocationTimedOut {
+      return const LocationRefreshError(
+        message: 'O GPS demorou demais para responder. Tente em campo '
+            'aberto ou escolha um ponto manualmente no mapa.',
+        action: LocationErrorAction.retry,
+      );
     } catch (_) {
-      return 'Não foi possível obter sua localização. Tente novamente.';
+      return const LocationRefreshError(
+        message: 'Não foi possível obter sua localização. Tente novamente.',
+        action: LocationErrorAction.retry,
+      );
     }
   }
 
+  /// Sets an explicit, user-chosen observer point (e.g. tapped on the map),
+  /// decoupled from the device's GPS.
   void setManual(ObserverLocation location) {
     state = location;
+    isManual = true;
   }
 }
 

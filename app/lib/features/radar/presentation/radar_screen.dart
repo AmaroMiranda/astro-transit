@@ -33,25 +33,27 @@ class RadarScreen extends ConsumerWidget {
           }
           final candidateIcaos =
               response.predictions.map((p) => p.candidate.icao24).toSet();
-          return Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                Expanded(
-                  child: RepaintBoundary(
-                    child: CustomPaint(
-                      size: Size.infinite,
-                      painter: _RadarPainter(
-                        bodies: response.bodies,
-                        predictions: response.predictions,
-                        candidateIcaos: candidateIcaos,
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  Expanded(
+                    child: RepaintBoundary(
+                      child: CustomPaint(
+                        size: Size.infinite,
+                        painter: _RadarPainter(
+                          bodies: response.bodies,
+                          predictions: response.predictions,
+                          candidateIcaos: candidateIcaos,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                _Legend(),
-              ],
+                  const SizedBox(height: 12),
+                  _Legend(),
+                ],
+              ),
             ),
           );
         },
