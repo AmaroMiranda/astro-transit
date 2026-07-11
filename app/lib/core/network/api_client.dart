@@ -31,11 +31,11 @@ class ApiClient {
 /// baked in as mutable app state — this is a compile-time constant, not a
 /// runtime-editable setting).
 ///
-/// Override with `--dart-define=API_BASE_URL=https://api.example.com` when
-/// building for a real deployment. Defaults to the Android emulator's alias
-/// for the host machine's localhost, which is only reachable in local
-/// development.
+/// Defaults to the hosted backend on Render, so release builds work out of
+/// the box. For local development against a backend on your machine, override
+/// with `--dart-define=API_BASE_URL=http://10.0.2.2:8000` (Android emulator's
+/// alias for the host's localhost).
 const kApiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'http://10.0.2.2:8000',
+  defaultValue: 'https://astrotransit-backend.onrender.com',
 );
