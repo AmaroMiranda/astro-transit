@@ -26,7 +26,9 @@ class HistoryScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('Histórico')),
       body: entriesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Erro: $e')),
+        error: (e, _) => const Center(
+          child: Text('Não foi possível carregar o histórico salvo.'),
+        ),
         data: (entries) {
           if (entries.isEmpty) {
             return const Center(

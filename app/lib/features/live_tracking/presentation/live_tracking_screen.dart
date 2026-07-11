@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/design_system/app_theme.dart';
+import '../../../core/network/friendly_error.dart';
 import '../../../core/providers.dart';
 import '../../../shared/models/celestial_position.dart';
 import '../../../shared/models/transit_prediction.dart';
@@ -68,7 +69,7 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
           });
         }
       },
-      onError: (e) => setState(() => _error = '$e'),
+      onError: (e) => setState(() => _error = friendlyErrorMessage(e)),
     );
   }
 

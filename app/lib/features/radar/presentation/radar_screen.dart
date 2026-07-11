@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/design_system/app_theme.dart';
+import '../../../core/network/friendly_error.dart';
 import '../../predictions/domain/prediction_providers.dart';
 import '../../../shared/models/celestial_position.dart';
 import '../../../shared/models/transit_prediction.dart';
@@ -25,7 +26,7 @@ class RadarScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('Radar')),
       body: predictionAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Erro: $e')),
+        error: (e, _) => Center(child: Text(friendlyErrorMessage(e))),
         data: (response) {
           if (response == null) {
             return const Center(child: Text('Localização indisponível.'));

@@ -12,6 +12,7 @@ Future<void> main() async {
   final container = ProviderContainer();
   await bootstrapOnboardingState(container);
   await bootstrapCameraCalibration(container);
+  await bootstrapUserPreferences(container);
 
   runApp(
     UncontrolledProviderScope(

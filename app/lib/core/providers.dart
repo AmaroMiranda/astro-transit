@@ -4,6 +4,7 @@
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'design_system/app_theme.dart';
 import 'location/location_service.dart';
@@ -50,3 +51,43 @@ final searchRadiusKmProvider = StateProvider<double>((ref) => 80.0);
 
 /// Which celestial bodies the user wants to track (RF-002).
 final selectedTargetsProvider = StateProvider<Set<String>>((ref) => {'sun', 'moon'});
+
+const _kThemeModeKey = 'astrotransit.theme_mode';
+const _kSearchRadiusKey = 'astrotransit.search_radius_km';
+const _kSelectedTargetsKey = 'astrotransit.selected_targets';
+
+/// Persists theme, search radius and selected targets across app restarts —
+/// otherwise every preference on the settings screen silently resets each
+/// launch, which is surprising for a screen whose whole purpose is to save
+/// a choice.
+Future<void> bootstrapUserPreferences(ProviderContainer container) async {
+  final prefs = await SharedPreferences.getInstance();
+
+  final storedTheme = prefs.getString(_kThemeModeKey);
+  if (storedTheme != null) {
+    for (final mode in AppThemeMode.values) {
+      if (mode.name == storedTheme) {
+        container.read(themeModeProvider.notifier).state = mode;
+        break;
+      }
+    }
+  }
+  final storedRadius = prefs.getDouble(_kSearchRadiusKey);
+  if (storedRadius != null) {
+    container.read(searchRadiusKmProvider.notifier).state = storedRadius;
+  }
+  final storedTargets = prefs.getStringList(_kSelectedTargetsKey);
+  if (storedTargets != null) {
+    container.read(selectedTargetsProvider.notifier).state = storedTargets.toSet();
+  }
+
+  container.listen(themeModeProvider, (previous, next) {
+    prefs.setString(_kThemeModeKey, next.name);
+  });
+  container.listen(searchRadiusKmProvider, (previous, next) {
+    prefs.setDouble(_kSearchRadiusKey, next);
+  });
+  container.listen(selectedTargetsProvider, (previous, next) {
+    prefs.setStringList(_kSelectedTargetsKey, next.toList());
+  });
+}

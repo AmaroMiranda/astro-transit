@@ -63,7 +63,6 @@ class AppTheme {
     brightness: Brightness.dark,
     colorScheme: _darkScheme,
     scaffoldBackgroundColor: const Color(0xFF05070F),
-    fontFamily: 'Segoe UI',
     cardTheme: CardThemeData(
       color: const Color(0xFF121A30),
       elevation: 0,
@@ -86,7 +85,6 @@ class AppTheme {
     brightness: Brightness.light,
     colorScheme: _lightScheme,
     scaffoldBackgroundColor: const Color(0xFFEEF1F8),
-    fontFamily: 'Segoe UI',
     cardTheme: CardThemeData(
       color: Colors.white,
       elevation: 0,
@@ -107,7 +105,6 @@ class AppTheme {
     brightness: Brightness.dark,
     colorScheme: _redScheme,
     scaffoldBackgroundColor: const Color(0xFF0A0202),
-    fontFamily: 'Segoe UI',
     cardTheme: CardThemeData(
       color: const Color(0xFF1A0707),
       elevation: 0,

@@ -85,8 +85,24 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
 
   @override
   void dispose() {
-    _controller?.dispose();
+    _disposeCamera();
     super.dispose();
+  }
+
+  // Recording must be stopped explicitly before disposal — otherwise the
+  // in-progress video file is left unfinalized (CameraController.dispose
+  // does not flush an active recording on its own).
+  Future<void> _disposeCamera() async {
+    final controller = _controller;
+    if (controller == null) return;
+    if (_isRecording) {
+      try {
+        await controller.stopVideoRecording();
+      } catch (_) {
+        // Best-effort: still dispose the controller below.
+      }
+    }
+    await controller.dispose();
   }
 
   @override

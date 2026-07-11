@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart' as ll;
 
 import '../../../core/design_system/app_theme.dart';
+import '../../../core/network/friendly_error.dart';
 import '../../../core/providers.dart';
 import '../../../shared/models/celestial_position.dart';
 import '../../../shared/models/transit_prediction.dart';
@@ -28,7 +29,7 @@ class MapScreen extends ConsumerWidget {
           ? const Center(child: Text('Localização indisponível.'))
           : predictionAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text('Erro: $e')),
+              error: (e, _) => Center(child: Text(friendlyErrorMessage(e))),
               data: (response) {
                 final predictionsWithCorridor = (response?.predictions ?? [])
                     .where((p) => p.corridor != null)

@@ -77,6 +77,15 @@ class ProviderRegistry:
                 age_seconds=now - cached.stored_at,
             )
 
+        if not self.providers:
+            return AircraftFetchResult(
+                aircraft=[],
+                provider_name="none",
+                fetched_at_utc=datetime.now(timezone.utc),
+                from_cache=False,
+                degraded=True,
+            )
+
         primary, *secondaries = self.providers
 
         # 1) Primary with one short retry.
@@ -120,12 +129,21 @@ class ProviderRegistry:
         self, key: str, aircraft: list[AircraftState], provider_name: str, degraded: bool
     ) -> AircraftFetchResult:
         fetched_at = datetime.now(timezone.utc)
+        now = time.monotonic()
         self._cache[key] = _CacheEntry(
             result=aircraft,
             provider_name=provider_name,
-            stored_at=time.monotonic(),
+            stored_at=now,
             fetched_at_utc=fetched_at,
         )
+        # Opportunistic eviction so the cache doesn't grow unbounded across
+        # distinct observer locations over a long-running process (a proper
+        # Redis deployment would use TTL expiry instead — see module docstring).
+        expired = [
+            k for k, v in self._cache.items() if (now - v.stored_at) > self.stale_after_s
+        ]
+        for k in expired:
+            del self._cache[k]
         return AircraftFetchResult(
             aircraft=aircraft,
             provider_name=provider_name,

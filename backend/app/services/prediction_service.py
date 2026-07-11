@@ -34,7 +34,7 @@ from app.providers.registry import AircraftFetchResult, ProviderRegistry
 # Pre-filter: keep aircraft whose current OR near-future line of sight is within this
 # angular window of the body. A fast, generous gate before the exact search.
 _PREFILTER_CONE_DEG = 8.0
-_PREFILTER_LOOKAHEAD_S = (0.0, 30.0, 60.0, 120.0)
+_PREFILTER_SAMPLE_STEP_S = 10.0
 
 # Margin used both for transit detection (matches prediction.transit default) and
 # for sizing the geographic corridor around the central line (RF-014).
@@ -68,12 +68,24 @@ class PredictionService:
         self._registry = registry
 
     def _passes_prefilter(
-        self, state: AircraftState, body: CelestialPosition, observer: ObserverLocation
+        self,
+        state: AircraftState,
+        body: CelestialPosition,
+        observer: ObserverLocation,
+        horizon_s: float,
     ) -> bool:
-        """Cheap angular gate over a few look-ahead samples (SPEC 11.1)."""
+        """Cheap angular gate over look-ahead samples spanning the full horizon
+        (SPEC 11.1). Samples must cover ``horizon_s`` — a fixed sample set that
+        stops short of the requested horizon would silently miss transits
+        beyond that point.
+        """
         if state.on_ground:
             return False
-        for t in _PREFILTER_LOOKAHEAD_S:
+        sample_count = max(2, int(horizon_s // _PREFILTER_SAMPLE_STEP_S) + 1)
+        lookahead_s = [
+            i * horizon_s / (sample_count - 1) for i in range(sample_count)
+        ]
+        for t in lookahead_s:
             projected = project_state(state, t)
             topo = observer_relative(
                 projected.latitude_deg,
@@ -118,7 +130,7 @@ class PredictionService:
             data_age = max(state.age_seconds, fetch.age_seconds)
             for body in visible_bodies:
                 # Steps 7: pre-filter.
-                if not self._passes_prefilter(state, body, observer):
+                if not self._passes_prefilter(state, body, observer, horizon_s):
                     continue
                 considered += 1
                 # Steps 8-13: exact candidate search + refinement.

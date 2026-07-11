@@ -123,3 +123,26 @@ async def test_statuses_reports_all_providers():
     statuses = await registry.statuses()
     assert {s.name for s in statuses} == {"fake", "secondary"}
     assert all(isinstance(s, ProviderStatus) for s in statuses)
+
+
+@pytest.mark.asyncio
+async def test_empty_provider_list_returns_degraded_empty_result_without_crashing():
+    registry = ProviderRegistry(providers=[])
+    result = await registry.get_aircraft_near(0.0, 0.0, 50.0)
+    assert result.aircraft == []
+    assert result.degraded
+    assert result.provider_name == "none"
+
+
+@pytest.mark.asyncio
+async def test_cache_does_not_grow_unbounded_across_distinct_locations():
+    primary = FakeProvider([_ac()])
+    registry = ProviderRegistry(providers=[primary], cache_ttl_s=0.0, stale_after_s=0.01)
+
+    for i in range(20):
+        await registry.get_aircraft_near(float(i), float(i), 50.0)
+        await asyncio.sleep(0.02)
+
+    # Every earlier entry should have expired past stale_after_s by the time
+    # later ones are stored, so the cache shouldn't accumulate all 20 keys.
+    assert len(registry._cache) < 20

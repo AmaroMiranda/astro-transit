@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/design_system/app_theme.dart';
+import '../../../core/network/friendly_error.dart';
 import '../../../core/providers.dart';
 import '../../../shared/models/celestial_position.dart';
 import '../../../shared/models/transit_prediction.dart';
@@ -49,7 +50,7 @@ class DashboardScreen extends ConsumerWidget {
             const SizedBox(height: 16),
             predictionAsync.when(
               loading: () => const _LoadingCard(),
-              error: (err, _) => _ErrorCard(message: '$err'),
+              error: (err, _) => _ErrorCard(message: friendlyErrorMessage(err)),
               data: (response) {
                 if (observer == null) {
                   return const _NoLocationCard();
