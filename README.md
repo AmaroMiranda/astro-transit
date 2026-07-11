@@ -11,6 +11,10 @@ trajetórias e calcula quando um deles poderá cruzar visualmente o disco solar 
 
 > Voltado a astrofotógrafos, fotógrafos de aviação e observadores do céu.
 
+**[⬇️ Baixar o APK (Releases)](https://github.com/AmaroMiranda/astro-transit/releases)** —
+na dúvida, use o `arm64-v8a` (celulares de 2017 em diante). Requer Android 7+ e um
+backend próprio ou local rodando (veja "Configurando o backend em build de release").
+
 ## Arquitetura
 
 ```
