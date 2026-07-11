@@ -11,6 +11,7 @@ import 'package:latlong2/latlong.dart' as ll;
 import '../../../core/design_system/app_theme.dart';
 import '../../../core/network/friendly_error.dart';
 import '../../../core/providers.dart';
+import '../../../core/utils/compass.dart';
 import '../../../shared/models/celestial_position.dart';
 import '../../../shared/models/transit_prediction.dart';
 import '../../predictions/domain/prediction_providers.dart';
@@ -142,12 +143,6 @@ class _CorridorInfoCard extends StatelessWidget {
 
   const _CorridorInfoCard({required this.prediction});
 
-  String _compassLabel(double azimuthDeg) {
-    const labels = ['N', 'NE', 'L', 'SE', 'S', 'SO', 'O', 'NO'];
-    final index = (((azimuthDeg % 360) + 22.5) / 45).floor() % 8;
-    return labels[index];
-  }
-
   @override
   Widget build(BuildContext context) {
     final corridor = prediction.corridor!;
@@ -166,9 +161,9 @@ class _CorridorInfoCard extends StatelessWidget {
             Text(
               distanceKm < 1
                   ? 'Ponto central a ${corridor.distanceFromObserverM.toStringAsFixed(0)} m '
-                      '(${_compassLabel(corridor.bearingFromObserverDeg)})'
+                      '(${compassLabel(corridor.bearingFromObserverDeg)})'
                   : 'Ponto central a ${distanceKm.toStringAsFixed(1)} km '
-                      '(${_compassLabel(corridor.bearingFromObserverDeg)})',
+                      '(${compassLabel(corridor.bearingFromObserverDeg)})',
             ),
             Text(
               'Largura aproximada da faixa: '

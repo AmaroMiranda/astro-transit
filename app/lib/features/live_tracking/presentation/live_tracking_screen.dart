@@ -14,6 +14,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/design_system/app_theme.dart';
 import '../../../core/network/friendly_error.dart';
 import '../../../core/providers.dart';
+import '../../../core/utils/compass.dart';
 import '../../../shared/models/celestial_position.dart';
 import '../../../shared/models/transit_prediction.dart';
 import '../../predictions/data/prediction_repository.dart';
@@ -164,7 +165,7 @@ class _CountdownView extends StatelessWidget {
         ),
         Text(
           '${c.aircraftAzimuthDeg.toStringAsFixed(0)}° · '
-          '${_compassLabel(c.aircraftAzimuthDeg)}',
+          '${compassLabel(c.aircraftAzimuthDeg)}',
           style: const TextStyle(color: Colors.white70, fontSize: 16),
         ),
         if (!isFinal) ...[
@@ -184,11 +185,6 @@ class _CountdownView extends StatelessWidget {
     );
   }
 
-  String _compassLabel(double azimuthDeg) {
-    const labels = ['N', 'NE', 'L', 'SE', 'S', 'SO', 'O', 'NO'];
-    final index = (((azimuthDeg % 360) + 22.5) / 45).floor() % 8;
-    return labels[index];
-  }
 }
 
 class _ErrorState extends StatelessWidget {

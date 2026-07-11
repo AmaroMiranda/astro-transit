@@ -13,8 +13,13 @@ class ApiClient {
       : dio = Dio(
           BaseOptions(
             baseUrl: baseUrl,
-            connectTimeout: const Duration(seconds: 8),
-            receiveTimeout: const Duration(seconds: 8),
+            connectTimeout: const Duration(seconds: 10),
+            // The prediction endpoint fans out to ADS-B providers with retry
+            // and failover (RF-006): primary timeout + retry + secondary can
+            // legitimately take 10-15s. An 8s receive timeout made the app
+            // give up right before slow-but-successful responses arrived.
+            receiveTimeout: const Duration(seconds: 30),
+            sendTimeout: const Duration(seconds: 10),
           ),
         );
 

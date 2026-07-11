@@ -39,6 +39,25 @@ class ObserverLocationController extends StateNotifier<ObserverLocation?> {
     state = await _service.currentLocation();
   }
 
+  /// Like [refresh], but never throws: returns a user-facing error message on
+  /// failure (null on success). This is what UI callers should use — the
+  /// throwing variant in a bare `onPressed` was an unhandled async exception
+  /// waiting to happen.
+  Future<String?> tryRefresh() async {
+    try {
+      state = await _service.currentLocation();
+      return null;
+    } on LocationPermissionDenied {
+      return 'Permissão de localização negada. Conceda o acesso nas '
+          'configurações do aparelho para buscar trânsitos.';
+    } on LocationServiceDisabled {
+      return 'A localização do aparelho está desativada. Ative o GPS e '
+          'tente novamente.';
+    } catch (_) {
+      return 'Não foi possível obter sua localização. Tente novamente.';
+    }
+  }
+
   void setManual(ObserverLocation location) {
     state = location;
   }
