@@ -215,6 +215,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
   void _showCalibrationSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
+      useSafeArea: true,
       builder: (context) => const _CalibrationSheet(),
     );
   }

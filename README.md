@@ -108,12 +108,35 @@ modelos compartilhados em `shared/models/` espelham os schemas do backend.
 A URL do backend é resolvida em tempo de build (`kApiBaseUrl` em
 `core/network/api_client.dart`), nunca hardcoded como segredo em runtime.
 Por padrão aponta para `http://10.0.2.2:8000` (alias do emulador Android
-para o localhost da máquina host — só funciona em desenvolvimento local).
+para o localhost da máquina host — só funciona em desenvolvimento local, e
+só dentro do emulador; um aparelho físico não alcança esse endereço).
 Para um backend real, defina no build:
 
 ```bash
 flutter build apk --release --dart-define=API_BASE_URL=https://sua-api.exemplo.com
 ```
+
+### Publicando o backend (Render)
+
+O repositório inclui `render.yaml` na raiz — um [Blueprint](https://render.com/docs/blueprint-spec)
+pronto para o [Render](https://render.com):
+
+1. Crie uma conta no Render (login com GitHub é suficiente, sem cartão).
+2. **New** → **Blueprint** → conecte o repositório `astro-transit`. O Render
+   detecta o `render.yaml` e cria o serviço `astrotransit-backend`
+   automaticamente (camada gratuita).
+3. Após o deploy, copie a URL pública (ex.:
+   `https://astrotransit-backend.onrender.com`) e use-a no build do app:
+   ```bash
+   flutter build apk --release --split-per-abi --dart-define=API_BASE_URL=https://astrotransit-backend.onrender.com
+   ```
+
+Na camada gratuita o serviço hiberna após ~15 min sem uso e leva de 30 a 60s
+para acordar na primeira chamada seguinte — normal para uso pessoal/teste.
+Credenciais OpenSky (opcionais, só aumentam o limite de requisições) podem
+ser definidas como variáveis de ambiente `ASTRO_OPENSKY_CLIENT_ID` e
+`ASTRO_OPENSKY_CLIENT_SECRET` no painel do Render; sem elas o provedor
+funciona normalmente na camada anônima.
 
 ### Gerando o ícone do app
 
