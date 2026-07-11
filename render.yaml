@@ -4,7 +4,14 @@ services:
     env: python
     plan: free
     rootDir: backend
-    buildCommand: pip install -e .
+    # Baixa a efeméride JPL (de421.bsp, ~17 MB) no build — assim ela já fica no
+    # runtime e não precisa ser baixada na primeira requisição (importante no
+    # free tier, que hiberna). O diretório casa com EphemerisService._data.
+    buildCommand: >-
+      pip install -e . &&
+      python -c "import os; from skyfield.api import Loader;
+      d=os.path.join('app','astronomy','_data'); os.makedirs(d, exist_ok=True);
+      Loader(d, verbose=False)('de421.bsp'); print('ephemeris pronta')"
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
