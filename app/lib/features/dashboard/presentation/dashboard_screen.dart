@@ -448,13 +448,29 @@ class _NextOpportunityCard extends StatelessWidget {
                   size: 28,
                 ),
                 const SizedBox(width: 10),
-                Text(bodyLabel, style: theme.textTheme.headlineSmall),
-                const Spacer(),
-                Text(
-                  '${minutes}m ${seconds.toString().padLeft(2, '0')}s',
-                  style: AppTheme.countdownStyle(context,
-                          color: theme.colorScheme.onSurface)
-                      .copyWith(fontSize: 32),
+                Flexible(
+                  child: Text(
+                    bodyLabel,
+                    style: theme.textTheme.headlineSmall,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                // FittedBox encolhe o contador em telas estreitas / fonte
+                // grande em vez de estourar a linha.
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      '${minutes}m ${seconds.toString().padLeft(2, '0')}s',
+                      maxLines: 1,
+                      style: AppTheme.countdownStyle(context,
+                              color: theme.colorScheme.onSurface)
+                          .copyWith(fontSize: 32),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -855,46 +871,74 @@ class _SectionLabel extends StatelessWidget {
 class _ExploreGrid extends StatelessWidget {
   const _ExploreGrid();
 
+  static const _tiles = [
+    _ExploreTile(
+      icon: Icons.radar,
+      color: Color(0xFF5EC2FF),
+      label: 'Radar',
+      subtitle: 'Céu em tempo real',
+      route: '/radar',
+    ),
+    _ExploreTile(
+      icon: Icons.map_outlined,
+      color: Color(0xFF3DDC84),
+      label: 'Mapa',
+      subtitle: 'Faixa do trânsito',
+      route: '/map',
+    ),
+    _ExploreTile(
+      icon: Icons.camera_alt_outlined,
+      color: Color(0xFFFFC169),
+      label: 'Câmera',
+      subtitle: 'Overlay e gravação',
+      route: '/camera',
+    ),
+    _ExploreTile(
+      icon: Icons.history,
+      color: Color(0xFF9FB0D6),
+      label: 'Histórico',
+      subtitle: 'Eventos registrados',
+      route: '/history',
+    ),
+  ];
+
   @override
   Widget build(BuildContext context) {
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      padding: EdgeInsets.zero,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      childAspectRatio: 1.45,
-      children: const [
-        _ExploreTile(
-          icon: Icons.radar,
-          color: Color(0xFF5EC2FF),
-          label: 'Radar',
-          subtitle: 'Céu em tempo real',
-          route: '/radar',
-        ),
-        _ExploreTile(
-          icon: Icons.map_outlined,
-          color: Color(0xFF3DDC84),
-          label: 'Mapa',
-          subtitle: 'Faixa do trânsito',
-          route: '/map',
-        ),
-        _ExploreTile(
-          icon: Icons.camera_alt_outlined,
-          color: Color(0xFFFFC169),
-          label: 'Câmera',
-          subtitle: 'Overlay e gravação',
-          route: '/camera',
-        ),
-        _ExploreTile(
-          icon: Icons.history,
-          color: Color(0xFF9FB0D6),
-          label: 'Histórico',
-          subtitle: 'Eventos registrados',
-          route: '/history',
-        ),
-      ],
+    // Rows of IntrinsicHeight instead of a fixed-aspect GridView: the tiles
+    // size to their content, so they never overflow when the system font
+    // scale grows or the screen is narrow. Below a very narrow width we drop
+    // to a single column.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final singleColumn = constraints.maxWidth < 340;
+        final perRow = singleColumn ? 1 : 2;
+        final rows = <Widget>[];
+        for (var i = 0; i < _tiles.length; i += perRow) {
+          final rowTiles = _tiles.skip(i).take(perRow).toList();
+          rows.add(
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var j = 0; j < rowTiles.length; j++) ...[
+                    if (j > 0) const SizedBox(width: 12),
+                    Expanded(child: rowTiles[j]),
+                  ],
+                  // Preenche a última linha ímpar em coluna dupla.
+                  if (!singleColumn && rowTiles.length == 1) ...[
+                    const SizedBox(width: 12),
+                    const Expanded(child: SizedBox()),
+                  ],
+                ],
+              ),
+            ),
+          );
+          if (i + perRow < _tiles.length) {
+            rows.add(const SizedBox(height: 12));
+          }
+        }
+        return Column(children: rows);
+      },
     );
   }
 }
@@ -925,7 +969,7 @@ class _ExploreTile extends StatelessWidget {
           padding: const EdgeInsets.all(14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Container(
                 width: 36,
@@ -936,24 +980,22 @@ class _ExploreTile extends StatelessWidget {
                 ),
                 child: Icon(icon, color: color, size: 20),
               ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w600),
-                  ),
-                  Text(
-                    subtitle,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontSize: 11,
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
+              const SizedBox(height: 12),
+              Text(
+                label,
+                style: theme.textTheme.titleSmall
+                    ?.copyWith(fontWeight: FontWeight.w600),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              Text(
+                subtitle,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontSize: 11,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),

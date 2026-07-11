@@ -151,10 +151,16 @@ class _CountdownView extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        Text(
-          '${minutes.toString().padLeft(2, '0')}:${seconds.toStringAsFixed(1).padLeft(4, '0')}',
-          style: AppTheme.countdownStyle(context, color: Colors.white)
-              .copyWith(fontSize: isFinal ? 88 : 64),
+        // FittedBox: o contador grande (até 88px) nunca estoura a largura em
+        // telas estreitas ou com fonte do sistema ampliada.
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            '${minutes.toString().padLeft(2, '0')}:${seconds.toStringAsFixed(1).padLeft(4, '0')}',
+            maxLines: 1,
+            style: AppTheme.countdownStyle(context, color: Colors.white)
+                .copyWith(fontSize: isFinal ? 88 : 64),
+          ),
         ),
         const SizedBox(height: 24),
         // North-up arrow toward the aircraft's azimuth (compass calibration
