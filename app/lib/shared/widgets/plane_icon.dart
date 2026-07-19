@@ -1,0 +1,115 @@
+/// Vector airliner silhouette shared by the map markers and the radar painter.
+///
+/// Drawn as a `Path` (top view, nose pointing up in a 20x20 box centred at the
+/// origin) instead of a font glyph: it rotates cleanly to the aircraft's track,
+/// scales without blurring, and does not depend on icon-font tree-shaking.
+library;
+
+import 'dart:math' as math;
+
+import 'package:flutter/material.dart';
+
+/// Airliner top-view silhouette in a 20x20 box centred at (0, 0), nose up.
+Path buildPlanePath() {
+  final path = Path()
+    ..moveTo(0.0, -9.8)                    // nose
+    ..cubicTo(0.9, -9.2, 1.2, -7.8, 1.2, -6.2)
+    ..lineTo(1.2, -2.6)                    // fuselage to wing root
+    ..lineTo(9.2, 1.6)                     // wing leading edge
+    ..lineTo(9.2, 3.4)                     // wing tip chord
+    ..lineTo(1.2, 1.4)                     // wing trailing edge
+    ..lineTo(1.0, 6.2)                     // rear fuselage
+    ..lineTo(3.6, 8.2)                     // tailplane leading edge
+    ..lineTo(3.6, 9.6)                     // tail tip
+    ..lineTo(0.0, 8.6)                     // tail root
+    ..lineTo(-3.6, 9.6)
+    ..lineTo(-3.6, 8.2)
+    ..lineTo(-1.0, 6.2)
+    ..lineTo(-1.2, 1.4)
+    ..lineTo(-9.2, 3.4)
+    ..lineTo(-9.2, 1.6)
+    ..lineTo(-1.2, -2.6)
+    ..lineTo(-1.2, -6.2)
+    ..cubicTo(-1.2, -7.8, -0.9, -9.2, 0.0, -9.8)
+    ..close();
+  return path;
+}
+
+final Path _planePath = buildPlanePath();
+
+/// Paints the shared silhouette rotated to ``headingDeg`` (0 = north/up,
+/// clockwise) and scaled to fit ``size``. Optionally adds a soft glow.
+void paintPlane(
+  Canvas canvas,
+  Offset center, {
+  required double headingDeg,
+  required Color color,
+  required double size,
+  Color? glowColor,
+}) {
+  canvas.save();
+  canvas.translate(center.dx, center.dy);
+  canvas.rotate(headingDeg * math.pi / 180.0);
+  final scale = size / 20.0;
+  canvas.scale(scale, scale);
+  if (glowColor != null) {
+    canvas.drawPath(
+      _planePath,
+      Paint()
+        ..color = glowColor
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+    );
+  }
+  canvas.drawPath(_planePath, Paint()..color = color);
+  canvas.restore();
+}
+
+/// Widget wrapper for map markers.
+class PlaneIcon extends StatelessWidget {
+  final double headingDeg;
+  final Color color;
+  final double size;
+  final Color? glowColor;
+
+  const PlaneIcon({
+    super.key,
+    required this.headingDeg,
+    required this.color,
+    required this.size,
+    this.glowColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _PlaneIconPainter(headingDeg, color, glowColor),
+    );
+  }
+}
+
+class _PlaneIconPainter extends CustomPainter {
+  final double headingDeg;
+  final Color color;
+  final Color? glowColor;
+
+  _PlaneIconPainter(this.headingDeg, this.color, this.glowColor);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    paintPlane(
+      canvas,
+      Offset(size.width / 2, size.height / 2),
+      headingDeg: headingDeg,
+      color: color,
+      size: size.shortestSide,
+      glowColor: glowColor,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _PlaneIconPainter old) =>
+      old.headingDeg != headingDeg ||
+      old.color != color ||
+      old.glowColor != glowColor;
+}

@@ -7,8 +7,8 @@ a transit before the expensive per-aircraft refinement runs.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timezone
+from dataclasses import dataclass, replace
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from app.astronomy.ephemeris import EphemerisService
@@ -28,9 +28,19 @@ from app.domain.models import (
     TransitCandidate,
     TransitObjectKind,
 )
+import math
+
 from app.geometry.angles import angular_separation_deg
 from app.geometry.coordinates import observer_relative
-from app.geometry.corridor import CorridorEstimate, estimate_corridor
+from app.geometry.corridor import (
+    CorridorEstimate,
+    _great_circle_distance_bearing,
+    estimate_corridor,
+)
+from app.geometry.satellite_ground import (
+    az_alt_to_ecef_direction,
+    satellite_shadow_point,
+)
 from app.prediction.projection import project_state
 from app.prediction.satellite_transit import find_satellite_transit
 from app.prediction.transit import find_transit_candidate
@@ -44,6 +54,11 @@ _PREFILTER_SAMPLE_STEP_S = 10.0
 # Margin used both for transit detection (matches prediction.transit default) and
 # for sizing the geographic corridor around the central line (RF-014).
 _CORRIDOR_MARGIN_DEG = 0.05
+
+# ADS-B fixes older than this are useless for a seconds-precision prediction even
+# after dead-reckoning them forward: the aircraft may have turned meanwhile. They
+# are skipped by the engine (still visible on the map).
+_MAX_DATA_AGE_S = 60.0
 
 
 @dataclass(frozen=True)
@@ -149,19 +164,36 @@ class PredictionService:
                     ),
                 )
 
+                # Satellite ground point: exact ray-ellipsoid intersection in
+                # ECEF — the aircraft corridor's flat-earth construction is
+                # invalid at orbital altitude (P0.3).
                 corridor = None
-                try:
-                    corridor = estimate_corridor(
-                        observer,
-                        body,
-                        aircraft_lat_deg=st.subpoint_lat_deg,
-                        aircraft_lon_deg=st.subpoint_lon_deg,
-                        aircraft_altitude_m=st.subpoint_alt_m,
-                        aircraft_radius_deg=st.candidate.aircraft_radius_deg,
-                        margin_deg=_CORRIDOR_MARGIN_DEG,
+                body_dir = az_alt_to_ecef_direction(
+                    st.candidate.body_azimuth_deg,
+                    st.candidate.body_altitude_deg,
+                    observer,
+                )
+                shadow = satellite_shadow_point(st.sat_ecef_m, body_dir)
+                if shadow is not None:
+                    center_lat, center_lon = shadow
+                    tolerance_rad = math.radians(
+                        st.candidate.body_radius_deg
+                        + st.candidate.aircraft_radius_deg
+                        + _CORRIDOR_MARGIN_DEG
                     )
-                except (ValueError, ZeroDivisionError):
-                    pass
+                    distance_m, bearing_deg = _great_circle_distance_bearing(
+                        observer.latitude_deg,
+                        observer.longitude_deg,
+                        center_lat,
+                        center_lon,
+                    )
+                    corridor = CorridorEstimate(
+                        center_lat_deg=center_lat,
+                        center_lon_deg=center_lon,
+                        half_width_m=tolerance_rad * st.slant_range_m,
+                        distance_from_observer_m=distance_m,
+                        bearing_from_observer_deg=bearing_deg,
+                    )
 
                 results.append(
                     TransitPrediction(
@@ -185,11 +217,18 @@ class PredictionService:
     ) -> PredictionResponse:
         when = when or datetime.now(timezone.utc)
 
-        # Steps 3: body positions.
+        # Steps 3: body positions at the start AND end of the horizon, so the
+        # search can move the Sun/Moon during the window (P0: ~0.5 deg/120 s —
+        # a full disc diameter — freezing it shifts the predicted instant).
         bodies = [
             self._ephemeris.position(body, observer, when) for body in targets
         ]
         visible_bodies = [b for b in bodies if b.altitude_deg > 0.0]
+        when_end = when + timedelta(seconds=horizon_s)
+        bodies_end = {
+            b.body: self._ephemeris.position(b.body, observer, when_end)
+            for b in visible_bodies
+        }
 
         # Step 4: fetch aircraft (with failover + cache).
         fetch: AircraftFetchResult = await self._registry.get_aircraft_near(
@@ -199,8 +238,31 @@ class PredictionService:
         predictions: list[TransitPrediction] = []
         considered = 0
 
-        for state in fetch.aircraft:
-            data_age = max(state.age_seconds, fetch.age_seconds)
+        for raw_state in fetch.aircraft:
+            # "Unknown" telemetry must never masquerade as zeros inside the
+            # engine (a missing track would mean "flying due north").
+            if not raw_state.telemetry_complete or raw_state.on_ground:
+                continue
+            data_age = max(
+                0.0, (when - raw_state.timestamp_utc).total_seconds()
+            )
+            if data_age > _MAX_DATA_AGE_S:
+                continue
+            # P0: the ADS-B fix is data_age seconds old — dead-reckon the
+            # aircraft forward so the search epoch (t=0) is *now*, not the
+            # instant the packet left the aircraft (5 s at 250 m/s = 1.25 km).
+            if data_age > 0.0:
+                adv = project_state(raw_state, data_age)
+                state = replace(
+                    raw_state,
+                    latitude_deg=adv.latitude_deg,
+                    longitude_deg=adv.longitude_deg,
+                    geometric_altitude_m=adv.altitude_m,
+                    timestamp_utc=when,
+                )
+            else:
+                state = raw_state
+            data_age = max(data_age, fetch.age_seconds)
             for body in visible_bodies:
                 # Steps 7: pre-filter.
                 if not self._passes_prefilter(state, body, observer, horizon_s):
@@ -208,7 +270,11 @@ class PredictionService:
                 considered += 1
                 # Steps 8-13: exact candidate search + refinement.
                 candidate = find_transit_candidate(
-                    state, body, observer, horizon_s=horizon_s
+                    state,
+                    body,
+                    observer,
+                    horizon_s=horizon_s,
+                    body_end=bodies_end[body.body],
                 )
                 if candidate is None or not candidate.is_transit:
                     continue

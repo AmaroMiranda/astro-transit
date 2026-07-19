@@ -24,6 +24,7 @@ import '../../../shared/models/aircraft_state.dart';
 import '../../../shared/models/celestial_position.dart';
 import '../../../shared/models/observer_location.dart';
 import '../../../shared/models/transit_prediction.dart';
+import '../../../shared/widgets/plane_icon.dart';
 import '../../predictions/domain/prediction_providers.dart';
 import '../domain/aircraft_providers.dart';
 
@@ -155,8 +156,15 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               onTap: _handleTap,
             ),
             children: [
+              // CARTO basemaps (OSM data): the dark variant matches the
+              // Celestial Precision theme; light for the Solar mode. Both
+              // require visible attribution (see RichAttributionWidget below).
               TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                urlTemplate: Theme.of(context).brightness == Brightness.dark
+                    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+                    : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+                subdomains: const ['a', 'b', 'c', 'd'],
+                retinaMode: RetinaMode.isHighDensity(context),
                 userAgentPackageName: 'com.astrotransit.astrotransit',
               ),
               CircleLayer(
@@ -205,27 +213,25 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                     if (!candidateIcaos.contains(a.icao24))
                       Marker(
                         point: ll.LatLng(a.latitude, a.longitude),
-                        width: 30,
-                        height: 30,
+                        width: 34,
+                        height: 34,
                         child: GestureDetector(
                           onTap: () => _showAircraftInfo(context, a),
-                          child: Transform.rotate(
-                            angle: a.trackDeg * math.pi / 180,
-                            child: const Icon(
-                              Icons.navigation,
-                              color: AstroColors.aircraftCommon,
-                              size: 20,
-                            ),
+                          child: PlaneIcon(
+                            headingDeg: a.trackDeg,
+                            color: AstroColors.aircraftCommon,
+                            size: 26,
+                            glowColor: Colors.black.withValues(alpha: 0.55),
                           ),
                         ),
                       ),
-                  // Aircraft with a probable transit: highlighted with a ring.
+                  // Aircraft with a probable transit: cyan glow ring + plane.
                   for (final a in aircraft)
                     if (candidateIcaos.contains(a.icao24))
                       Marker(
                         point: ll.LatLng(a.latitude, a.longitude),
-                        width: 40,
-                        height: 40,
+                        width: 46,
+                        height: 46,
                         child: GestureDetector(
                           onTap: () => _showAircraftInfo(context, a),
                           child: _CandidateAircraftMarker(trackDeg: a.trackDeg),
@@ -239,15 +245,11 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                           p.corridor!.centerLatitude,
                           p.corridor!.centerLongitude,
                         ),
-                        width: 40,
-                        height: 40,
+                        width: 46,
+                        height: 46,
                         child: GestureDetector(
                           onTap: () => _showPredictionInfo(context, p),
-                          child: const Icon(
-                            Icons.satellite_alt,
-                            color: AstroColors.satellite,
-                            size: 28,
-                          ),
+                          child: const _SatelliteMarker(),
                         ),
                       ),
                   // Aircraft transit ground-crossing points.
@@ -270,13 +272,12 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   if (observer != null)
                     Marker(
                       point: observerPoint,
-                      width: 36,
-                      height: 36,
-                      child: Icon(
-                        Icons.my_location,
-                        color: ref.read(observerLocationProvider.notifier).isManual
-                            ? AstroColors.warning
-                            : Colors.white,
+                      width: 40,
+                      height: 40,
+                      child: _ObserverMarker(
+                        manual: ref
+                            .read(observerLocationProvider.notifier)
+                            .isManual,
                       ),
                     ),
                   if (_previewPoint != null)
@@ -290,6 +291,13 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                         size: 40,
                       ),
                     ),
+                ],
+              ),
+              RichAttributionWidget(
+                alignment: AttributionAlignment.bottomLeft,
+                attributions: [
+                  TextSourceAttribution('© OpenStreetMap contributors'),
+                  TextSourceAttribution('© CARTO'),
                 ],
               ),
             ],
@@ -543,8 +551,8 @@ String _timeToTransitLabel(double seconds) {
   return rem == 0 ? 'em ${m}min' : 'em ${m}min ${rem}s';
 }
 
-/// Highlighted marker for an aircraft with a probable transit: a ring around a
-/// track-rotated arrow, in the candidate colour.
+/// Highlighted marker for an aircraft with a probable transit: a glowing ring
+/// around the shared plane silhouette, in the candidate colour.
 class _CandidateAircraftMarker extends StatelessWidget {
   final double trackDeg;
 
@@ -555,17 +563,77 @@ class _CandidateAircraftMarker extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: AstroColors.aircraftCandidate.withValues(alpha: 0.18),
-        border: Border.all(color: AstroColors.aircraftCandidate, width: 2),
+        color: AstroColors.aircraftCandidate.withValues(alpha: 0.14),
+        border: Border.all(color: AstroColors.aircraftCandidate, width: 1.6),
+        boxShadow: [
+          BoxShadow(
+            color: AstroColors.aircraftCandidate.withValues(alpha: 0.45),
+            blurRadius: 10,
+            spreadRadius: 1,
+          ),
+        ],
       ),
       child: Center(
-        child: Transform.rotate(
-          angle: trackDeg * math.pi / 180,
-          child: const Icon(
-            Icons.navigation,
-            color: AstroColors.aircraftCandidate,
-            size: 20,
+        child: PlaneIcon(
+          headingDeg: trackDeg,
+          color: AstroColors.aircraftCandidate,
+          size: 26,
+        ),
+      ),
+    );
+  }
+}
+
+/// Satellite transit ground point: purple glow chip.
+class _SatelliteMarker extends StatelessWidget {
+  const _SatelliteMarker();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: AstroColors.satellite.withValues(alpha: 0.14),
+        border: Border.all(color: AstroColors.satellite, width: 1.6),
+        boxShadow: [
+          BoxShadow(
+            color: AstroColors.satellite.withValues(alpha: 0.45),
+            blurRadius: 10,
+            spreadRadius: 1,
           ),
+        ],
+      ),
+      child: const Center(
+        child: Icon(Icons.satellite_alt, color: AstroColors.satellite, size: 22),
+      ),
+    );
+  }
+}
+
+/// Observer position: dot with a soft halo (amber when manually picked).
+class _ObserverMarker extends StatelessWidget {
+  final bool manual;
+
+  const _ObserverMarker({required this.manual});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = manual ? AstroColors.warning : AstroColors.transitCyan;
+    return Center(
+      child: Container(
+        width: 18,
+        height: 18,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: color,
+          border: Border.all(color: Colors.white, width: 2.5),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.55),
+              blurRadius: 12,
+              spreadRadius: 4,
+            ),
+          ],
         ),
       ),
     );

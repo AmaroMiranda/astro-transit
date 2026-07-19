@@ -85,6 +85,30 @@ async def test_adsblol_still_reads_ac_key():
 
 
 @pytest.mark.asyncio
+async def test_missing_telemetry_is_flagged_not_zeroed():
+    captured: list[str] = []
+    payload = {
+        "ac": [
+            _SAMPLE_AC,                                             # completo
+            {"hex": "aaa111", "lat": -23.0, "lon": -46.0,
+             "alt_geom": 30000, "track": 90.0, "seen_pos": 1.0},     # sem gs
+            {"hex": "bbb222", "lat": -23.1, "lon": -46.1,
+             "alt_geom": 30000, "gs": 400.0, "seen_pos": 1.0},       # sem track
+        ]
+    }
+    client = _client_returning(payload, captured)
+    provider = AirplanesLiveProvider(client=client)
+
+    states = await provider.get_aircraft_near(-23.5, -46.6, 80.0)
+
+    by_id = {s.icao24: s for s in states}
+    assert by_id["e48df6"].telemetry_complete is True
+    assert by_id["aaa111"].telemetry_complete is False
+    assert by_id["bbb222"].telemetry_complete is False
+    await client.aclose()
+
+
+@pytest.mark.asyncio
 async def test_ground_aircraft_and_missing_position_are_handled():
     captured: list[str] = []
     payload = {

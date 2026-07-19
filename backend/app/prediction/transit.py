@@ -3,9 +3,13 @@
 Given an aircraft state, a celestial position and an observer, this module finds the
 instant of closest angular approach and classifies the resulting event.
 
-The celestial body is treated as fixed over the short (<=120 s) horizon: the Sun and
-Moon move ~0.004 deg/s across the sky, which is negligible next to aircraft angular
-rates. If higher fidelity is ever required, ``body_at`` can be made time-dependent.
+The Sun/Moon move ~0.004 deg/s across the sky — about one full disc diameter over a
+120 s horizon — so the body must NOT be frozen during the search: freezing it can
+shift the detected instant by tens of seconds or flip a transit into a miss. The
+caller passes the body position at the start *and* end of the horizon
+(``body_end``) and the search interpolates linearly in between. Linear interpolation
+is exact to well under 1 mdeg over <=600 s (the az/alt rates change on hour scales),
+matching the approach validated in the satellite engine.
 """
 
 from __future__ import annotations
@@ -39,9 +43,41 @@ class _Sample:
     aircraft_alt: float
 
 
+def _make_body_at(
+    body: CelestialPosition,
+    body_end: Optional[CelestialPosition],
+    horizon_s: float,
+) -> Callable[[float], tuple[float, float, float]]:
+    """Return ``t -> (azimuth, altitude, angular_radius)`` for the body.
+
+    Interpolates linearly (shortest-arc in azimuth) between the position at the
+    start and at the end of the horizon. With ``body_end`` omitted the body is
+    frozen — acceptable only for tests/synthetic scenarios.
+    """
+    if body_end is None or horizon_s <= 0.0:
+        return lambda t: (
+            body.azimuth_deg,
+            body.altitude_deg,
+            body.angular_radius_deg,
+        )
+    d_az = ((body_end.azimuth_deg - body.azimuth_deg + 180.0) % 360.0) - 180.0
+    d_alt = body_end.altitude_deg - body.altitude_deg
+    d_rad = body_end.angular_radius_deg - body.angular_radius_deg
+
+    def at(t: float) -> tuple[float, float, float]:
+        f = min(max(t / horizon_s, 0.0), 1.0)
+        return (
+            (body.azimuth_deg + f * d_az) % 360.0,
+            body.altitude_deg + f * d_alt,
+            body.angular_radius_deg + f * d_rad,
+        )
+
+    return at
+
+
 def _separation_at(
     state: AircraftState,
-    body: CelestialPosition,
+    body_at: Callable[[float], tuple[float, float, float]],
     observer: ObserverLocation,
     t: float,
 ) -> _Sample:
@@ -49,8 +85,9 @@ def _separation_at(
     topo = observer_relative(
         projected.latitude_deg, projected.longitude_deg, projected.altitude_m, observer
     )
+    body_az, body_alt, _ = body_at(t)
     sep = angular_separation_deg(
-        topo.azimuth_deg, topo.altitude_deg, body.azimuth_deg, body.altitude_deg
+        topo.azimuth_deg, topo.altitude_deg, body_az, body_alt
     )
     return _Sample(sep, topo.azimuth_deg, topo.altitude_deg)
 
@@ -108,8 +145,13 @@ def find_transit_candidate(
     coarse_step_s: float = 1.0,
     refine_tol_s: float = 0.1,
     margin_deg: float = 0.05,
+    body_end: Optional[CelestialPosition] = None,
 ) -> Optional[TransitCandidate]:
     """Find the closest approach of ``state`` to ``body`` within ``horizon_s``.
+
+    ``body`` is the position at t=0 and ``body_end`` at t=``horizon_s``; the search
+    interpolates between them so the body moves during the window (P0: freezing the
+    Sun/Moon shifts the detected instant by up to tens of seconds).
 
     Returns ``None`` for aircraft on the ground or when the body is below the horizon.
     Otherwise returns a :class:`TransitCandidate` (possibly classified ``APPROACH`` /
@@ -118,8 +160,10 @@ def find_transit_candidate(
     if state.on_ground or body.altitude_deg <= 0.0:
         return None
 
+    body_at = _make_body_at(body, body_end, horizon_s)
+
     def sep_fn(t: float) -> float:
-        return _separation_at(state, body, observer, t).separation_deg
+        return _separation_at(state, body_at, observer, t).separation_deg
 
     # Coarse scan on a 1 s grid to locate the minimum bracket (RF stage 2).
     best_t = 0.0
@@ -136,7 +180,8 @@ def find_transit_candidate(
     hi = min(horizon_s, best_t + coarse_step_s)
     refined_t = _golden_section_min(sep_fn, lo, hi, refine_tol_s)
 
-    sample = _separation_at(state, body, observer, refined_t)
+    sample = _separation_at(state, body_at, observer, refined_t)
+    body_az_t, body_alt_t, body_radius_t = body_at(refined_t)
 
     # Apparent size of the aircraft at the refined instant.
     projected = project_state(state, refined_t)
@@ -147,7 +192,7 @@ def find_transit_candidate(
     aircraft_radius_deg = angular_size_deg(wingspan, topo.range_m) / 2.0
 
     transit_class = classify_transit(
-        sample.separation_deg, body.angular_radius_deg, aircraft_radius_deg, margin_deg
+        sample.separation_deg, body_radius_t, aircraft_radius_deg, margin_deg
     )
 
     return TransitCandidate(
@@ -155,11 +200,11 @@ def find_transit_candidate(
         body=body.body,
         time_to_transit_s=refined_t,
         min_separation_deg=sample.separation_deg,
-        body_radius_deg=body.angular_radius_deg,
+        body_radius_deg=body_radius_t,
         aircraft_radius_deg=aircraft_radius_deg,
         transit_class=transit_class,
         aircraft_azimuth_deg=sample.aircraft_az,
         aircraft_altitude_deg=sample.aircraft_alt,
-        body_azimuth_deg=body.azimuth_deg,
-        body_altitude_deg=body.altitude_deg,
+        body_azimuth_deg=body_az_t,
+        body_altitude_deg=body_alt_t,
     )

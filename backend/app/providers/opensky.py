@@ -127,9 +127,19 @@ class OpenSkyProvider(AircraftDataProvider):
             return None
 
         geo_alt = s[_IDX_GEO_ALT] if len(s) > _IDX_GEO_ALT else None
-        altitude_m = geo_alt if geo_alt is not None else (s[_IDX_BARO_ALT] or 0.0)
+        baro_alt = s[_IDX_BARO_ALT]
+        altitude_m = geo_alt if geo_alt is not None else (baro_alt or 0.0)
         last_contact = s[_IDX_LAST_CONTACT] or time.time()
         callsign = (s[_IDX_CALLSIGN] or "").strip() or None
+
+        # "Unknown" is not "zero" — see readsb.py. Missing altitude/velocity/track
+        # excludes the aircraft from the prediction engine (still shown on map).
+        on_ground = bool(s[_IDX_ON_GROUND])
+        telemetry_complete = on_ground or not (
+            (geo_alt is None and baro_alt is None)
+            or s[_IDX_VELOCITY] is None
+            or s[_IDX_TRUE_TRACK] is None
+        )
 
         return AircraftState(
             icao24=str(icao).lower(),
@@ -140,8 +150,9 @@ class OpenSkyProvider(AircraftDataProvider):
             track_deg=float(s[_IDX_TRUE_TRACK] or 0.0),
             vertical_rate_mps=float(s[_IDX_VERTICAL_RATE] or 0.0),
             callsign=callsign,
-            on_ground=bool(s[_IDX_ON_GROUND]),
+            on_ground=on_ground,
             timestamp_utc=datetime.fromtimestamp(float(last_contact), tz=timezone.utc),
+            telemetry_complete=telemetry_complete,
         )
 
     async def get_status(self) -> ProviderStatus:

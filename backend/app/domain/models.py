@@ -93,6 +93,11 @@ class AircraftState:
     on_ground: bool = False
     category: AircraftCategory = AircraftCategory.UNKNOWN
     timestamp_utc: datetime = field(default_factory=_utcnow)
+    # False when the feed omitted altitude, speed or track and a placeholder was
+    # substituted. Such aircraft may be *displayed*, but must never enter the
+    # prediction engine — "unknown" is not "zero" (a missing track would be
+    # silently treated as flying due north).
+    telemetry_complete: bool = True
 
     @property
     def age_seconds(self) -> float:

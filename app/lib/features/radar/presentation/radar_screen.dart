@@ -16,6 +16,7 @@ import '../../predictions/domain/prediction_providers.dart';
 import '../../../shared/models/aircraft_state.dart';
 import '../../../shared/models/celestial_position.dart';
 import '../../../shared/models/transit_prediction.dart';
+import '../../../shared/widgets/plane_icon.dart';
 
 class RadarScreen extends ConsumerWidget {
   const RadarScreen({super.key});
@@ -112,24 +113,20 @@ class _RadarPainter extends CustomPainter {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = math.min(size.width, size.height) / 2 - 24;
 
+    _paintBackground(canvas, center, radius);
     _paintRings(canvas, center, radius);
     _paintCompassLabels(canvas, center, radius);
 
     for (final body in bodies) {
       if (!body.isVisible) continue;
-      _paintPoint(
+      final color = body.target == CelestialBody.moon
+          ? AstroColors.moon
+          : AstroColors.sun;
+      _paintBody(
         canvas,
-        center,
-        radius,
-        azimuthDeg: body.azimuthDeg,
-        altitudeDeg: body.altitudeDeg,
-        color: body.target == CelestialBody.moon
-            ? AstroColors.moon
-            : AstroColors.sun,
-        size: 14,
-        icon: body.target == CelestialBody.moon
-            ? Icons.nightlight_round
-            : Icons.wb_sunny,
+        _project(center, radius, body.azimuthDeg, body.altitudeDeg),
+        color: color,
+        radius: 11,
       );
     }
 
@@ -137,28 +134,30 @@ class _RadarPainter extends CustomPainter {
     // candidates highlighted (drawn on top).
     for (final a in aircraft) {
       if (candidateIcaos.contains(a.icao24)) continue;
-      _paintPoint(
+      paintPlane(
         canvas,
-        center,
-        radius,
-        azimuthDeg: a.azimuthDeg!,
-        altitudeDeg: a.altitudeDeg!,
+        _project(center, radius, a.azimuthDeg!, a.altitudeDeg!),
+        headingDeg: a.trackDeg,
         color: AstroColors.aircraftCommon,
-        size: 7,
-        icon: Icons.flight,
+        size: 15,
       );
     }
     for (final a in aircraft) {
       if (!candidateIcaos.contains(a.icao24)) continue;
-      _paintPoint(
+      final pos = _project(center, radius, a.azimuthDeg!, a.altitudeDeg!);
+      canvas.drawCircle(
+        pos,
+        13,
+        Paint()
+          ..color = AstroColors.aircraftCandidate.withValues(alpha: 0.35)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+      );
+      paintPlane(
         canvas,
-        center,
-        radius,
-        azimuthDeg: a.azimuthDeg!,
-        altitudeDeg: a.altitudeDeg!,
+        pos,
+        headingDeg: a.trackDeg,
         color: AstroColors.aircraftCandidate,
-        size: 11,
-        icon: Icons.flight,
+        size: 20,
       );
     }
 
@@ -168,31 +167,107 @@ class _RadarPainter extends CustomPainter {
     for (final prediction in predictions) {
       final c = prediction.candidate;
       if (!prediction.isSatellite && plottedIcaos.contains(c.icao24)) continue;
-      _paintPoint(
-        canvas,
-        center,
-        radius,
-        azimuthDeg: c.aircraftAzimuthDeg,
-        altitudeDeg: c.aircraftAltitudeDeg,
-        color: prediction.isSatellite
-            ? AstroColors.satellite
-            : AstroColors.aircraftCandidate,
-        size: 11,
-        icon: prediction.isSatellite ? Icons.satellite_alt : Icons.flight,
-      );
+      final pos =
+          _project(center, radius, c.aircraftAzimuthDeg, c.aircraftAltitudeDeg);
+      if (prediction.isSatellite) {
+        _paintSatellite(canvas, pos);
+      } else {
+        paintPlane(
+          canvas,
+          pos,
+          headingDeg: 0,
+          color: AstroColors.aircraftCandidate,
+          size: 20,
+          glowColor: AstroColors.aircraftCandidate.withValues(alpha: 0.5),
+        );
+      }
     }
+  }
+
+  /// Azimuth/altitude -> position on the disc (zenith at centre, horizon at rim).
+  Offset _project(
+    Offset center, double radius, double azimuthDeg, double altitudeDeg,
+  ) {
+    final clampedAlt = altitudeDeg.clamp(0.0, 90.0);
+    final r = radius * (1 - clampedAlt / 90.0);
+    final angle = _deg2rad(azimuthDeg) - math.pi / 2;
+    return center + Offset(math.cos(angle), math.sin(angle)) * r;
+  }
+
+  void _paintBackground(Canvas canvas, Offset center, double radius) {
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..shader = const RadialGradient(
+          colors: [Color(0xFF10203A), Color(0xFF081020), AstroColors.deepSpace],
+          stops: [0.0, 0.55, 1.0],
+        ).createShader(rect),
+    );
   }
 
   void _paintRings(Canvas canvas, Offset center, double radius) {
     final ringPaint = Paint()
-      ..color = Colors.white24
+      ..color = AstroColors.border
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
-    for (final fraction in [0.33, 0.66, 1.0]) {
+    // Elevation rings: horizon (rim), 30 deg, 60 deg.
+    for (final fraction in [1.0, 2.0 / 3.0, 1.0 / 3.0]) {
       canvas.drawCircle(center, radius * fraction, ringPaint);
     }
-    // Observer marker.
-    canvas.drawCircle(center, 4, Paint()..color = Colors.white70);
+    // Outer rim slightly brighter.
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..color = const Color(0xFF35507E)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.4,
+    );
+
+    // Subtle N-S / E-W cross hairs.
+    final crossPaint = Paint()
+      ..color = AstroColors.border.withValues(alpha: 0.55)
+      ..strokeWidth = 1;
+    canvas.drawLine(center - Offset(0, radius), center + Offset(0, radius), crossPaint);
+    canvas.drawLine(center - Offset(radius, 0), center + Offset(radius, 0), crossPaint);
+
+    // Azimuth ticks every 30 deg on the rim.
+    final tickPaint = Paint()
+      ..color = const Color(0xFF43608F)
+      ..strokeWidth = 1.6;
+    for (var az = 0; az < 360; az += 30) {
+      final angle = _deg2rad(az.toDouble()) - math.pi / 2;
+      final dir = Offset(math.cos(angle), math.sin(angle));
+      canvas.drawLine(center + dir * (radius - 6), center + dir * radius, tickPaint);
+    }
+
+    // Elevation labels on the vertical axis.
+    for (final (fraction, label) in [(2.0 / 3.0, '30°'), (1.0 / 3.0, '60°')]) {
+      final tp = TextPainter(
+        text: TextSpan(
+          text: label,
+          style: const TextStyle(color: Color(0xFF5C7196), fontSize: 10),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(
+        canvas,
+        center + Offset(3, -radius * fraction - tp.height - 1),
+      );
+    }
+
+    // Observer marker (zenith) at the centre.
+    canvas.drawCircle(center, 3.4, Paint()..color = Colors.white70);
+    canvas.drawCircle(
+      center,
+      6.5,
+      Paint()
+        ..color = Colors.white24
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
   }
 
   static const _compassLabels = [(0.0, 'N'), (90.0, 'L'), (180.0, 'S'), (270.0, 'O')];
@@ -202,10 +277,15 @@ class _RadarPainter extends CustomPainter {
       final angle = _deg2rad(azimuth) - math.pi / 2;
       final pos = center +
           Offset(math.cos(angle), math.sin(angle)) * (radius + 14);
+      final isNorth = azimuth == 0.0;
       final tp = TextPainter(
         text: TextSpan(
           text: label,
-          style: const TextStyle(color: Colors.white54, fontSize: 12),
+          style: TextStyle(
+            color: isNorth ? AstroColors.transitCyan : AstroColors.telemetry,
+            fontSize: isNorth ? 13 : 12,
+            fontWeight: isNorth ? FontWeight.w800 : FontWeight.w600,
+          ),
         ),
         textDirection: TextDirection.ltr,
       )..layout();
@@ -213,41 +293,55 @@ class _RadarPainter extends CustomPainter {
     }
   }
 
-  /// Projects azimuth/altitude onto the 2D radar disc. Altitude maps to
-  /// radial distance (zenith at the center, horizon at the rim) so the whole
-  /// visible sky fits on screen — a deliberate simplification vs. a literal
-  /// polar plot, chosen for legibility (SPEC RF-020).
-  void _paintPoint(
-    Canvas canvas,
-    Offset center,
-    double radius,
-    {required double azimuthDeg,
-    required double altitudeDeg,
-    required Color color,
-    required double size,
-    required IconData icon}
+  /// Sun/Moon: soft glow halo + solid disc.
+  void _paintBody(
+    Canvas canvas, Offset pos, {required Color color, required double radius}
   ) {
-    final clampedAlt = altitudeDeg.clamp(0.0, 90.0);
-    final r = radius * (1 - clampedAlt / 90.0);
-    final angle = _deg2rad(azimuthDeg) - math.pi / 2;
-    final pos = center + Offset(math.cos(angle), math.sin(angle)) * r;
+    canvas.drawCircle(
+      pos,
+      radius * 2.2,
+      Paint()
+        ..color = color.withValues(alpha: 0.30)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10),
+    );
+    canvas.drawCircle(pos, radius, Paint()..color = color);
+    canvas.drawCircle(
+      pos,
+      radius,
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.35)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+  }
 
-    canvas.drawCircle(pos, size, Paint()..color = color.withValues(alpha: 0.25));
-    final textPainter = TextPainter(
-      text: TextSpan(
-        text: String.fromCharCode(icon.codePoint),
-        style: TextStyle(
-          fontSize: size * 1.6,
-          fontFamily: icon.fontFamily,
-          package: icon.fontPackage,
-          color: color,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    textPainter.paint(
-      canvas,
-      pos - Offset(textPainter.width / 2, textPainter.height / 2),
+  /// Satellite: glowing dot with solar-panel bars (drawn, not a font glyph).
+  void _paintSatellite(Canvas canvas, Offset pos) {
+    const color = AstroColors.satellite;
+    canvas.drawCircle(
+      pos,
+      12,
+      Paint()
+        ..color = color.withValues(alpha: 0.35)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+    );
+    final panel = Paint()..color = color;
+    canvas.drawRect(
+      Rect.fromCenter(center: pos - const Offset(8, 0), width: 7, height: 4),
+      panel,
+    );
+    canvas.drawRect(
+      Rect.fromCenter(center: pos + const Offset(8, 0), width: 7, height: 4),
+      panel,
+    );
+    canvas.drawCircle(pos, 3.6, panel);
+    canvas.drawCircle(
+      pos,
+      3.6,
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.5)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
     );
   }
 
@@ -286,17 +380,40 @@ class _LegendItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 6),
-        Text(label, style: Theme.of(context).textTheme.bodySmall),
-      ],
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: AstroColors.orbitalSurface,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AstroColors.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.5),
+                  blurRadius: 5,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(color: AstroColors.telemetry),
+          ),
+        ],
+      ),
     );
   }
 }

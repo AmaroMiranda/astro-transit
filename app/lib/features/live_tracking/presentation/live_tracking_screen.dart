@@ -30,20 +30,31 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
   StreamSubscription<LiveTransitEvent>? _sub;
   dynamic _channel;
   TransitPrediction? _prediction;
+
+  /// Absolute UTC instant of the event, anchored to the server's epoch
+  /// (`generated_at_utc + time_to_transit_s`). The countdown is *derived* from
+  /// this each frame — a decrementing counter drifts with frame drops, GC and
+  /// backgrounding, and never accounts for message latency (P0.5).
+  DateTime? _transitAtUtc;
+  bool _cancelled = false;
   Timer? _tickTimer;
-  double _localCountdown = 0;
   String? _error;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _connect());
-    // Smooth local countdown between server updates (section 11.4: 10 Hz UI
-    // tick locally, independent of the server's real update cadence).
+    // 10 Hz repaint only — the source of truth for time is _transitAtUtc.
     _tickTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
-      if (!mounted) return;
-      setState(() => _localCountdown = (_localCountdown - 0.1).clamp(0, 999999));
+      if (mounted && _transitAtUtc != null) setState(() {});
     });
+  }
+
+  double get _countdown {
+    final at = _transitAtUtc;
+    if (at == null) return 0;
+    final ms = at.difference(DateTime.now().toUtc()).inMilliseconds;
+    return ms <= 0 ? 0 : ms / 1000.0;
   }
 
   void _connect() {
@@ -61,12 +72,29 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
           setState(() => _error = event.detail);
           return;
         }
-        final predictions = event.data?.predictions ?? [];
+        final data = event.data;
+        final predictions = data?.predictions ?? [];
         if (predictions.isNotEmpty) {
+          final first = predictions.first;
           setState(() {
-            _prediction = predictions.first;
-            _localCountdown = predictions.first.candidate.timeToTransitS;
+            _prediction = first;
+            _transitAtUtc = data!.generatedAtUtc.add(
+              Duration(
+                milliseconds:
+                    (first.candidate.timeToTransitS * 1000).round(),
+              ),
+            );
+            _cancelled = false;
             _error = null;
+          });
+        } else if (_prediction != null) {
+          // The event we were tracking is gone (transit_cancelled /
+          // no_candidates): stop the countdown instead of letting the user
+          // point a camera at an event that no longer exists (P0.4).
+          setState(() {
+            _prediction = null;
+            _transitAtUtc = null;
+            _cancelled = true;
           });
         }
       },
@@ -85,7 +113,8 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
   @override
   Widget build(BuildContext context) {
     final prediction = _prediction;
-    final isFinal = _localCountdown <= 30;
+    final countdown = _countdown;
+    final isFinal = prediction != null && countdown <= 30;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -99,13 +128,15 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
         child: Center(
           child: _error != null
               ? _ErrorState(message: _error!, onBack: () => context.pop())
-              : prediction == null
-                  ? const CircularProgressIndicator()
-                  : _CountdownView(
-                      prediction: prediction,
-                      countdown: _localCountdown,
-                      isFinal: isFinal,
-                    ),
+              : _cancelled
+                  ? _CancelledState(onBack: () => context.pop())
+                  : prediction == null
+                      ? const _WaitingState()
+                      : _CountdownView(
+                          prediction: prediction,
+                          countdown: countdown,
+                          isFinal: isFinal,
+                        ),
         ),
       ),
       floatingActionButton: !isFinal
@@ -115,6 +146,59 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
               icon: const Icon(Icons.camera_alt),
               label: const Text('Câmera'),
             ),
+    );
+  }
+}
+
+class _WaitingState extends StatelessWidget {
+  const _WaitingState();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        CircularProgressIndicator(),
+        SizedBox(height: 16),
+        Text(
+          'Procurando candidatos na sua região…',
+          style: TextStyle(color: Colors.white70),
+        ),
+      ],
+    );
+  }
+}
+
+class _CancelledState extends StatelessWidget {
+  final VoidCallback onBack;
+
+  const _CancelledState({required this.onBack});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.flight_takeoff, color: AstroColors.warning, size: 40),
+        const SizedBox(height: 12),
+        const Text(
+          'Trânsito cancelado',
+          style: TextStyle(
+              color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 6),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 32),
+          child: Text(
+            'A trajetória mudou e o cruzamento não deve mais acontecer. '
+            'Seguimos monitorando novos candidatos.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white54, fontSize: 14),
+          ),
+        ),
+        const SizedBox(height: 16),
+        OutlinedButton(onPressed: onBack, child: const Text('Voltar')),
+      ],
     );
   }
 }

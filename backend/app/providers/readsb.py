@@ -100,6 +100,14 @@ class ReadsbPointProvider(AircraftDataProvider):
         callsign = (ac.get("flight") or "").strip() or None
         category = _CATEGORY_MAP.get(ac.get("category"), AircraftCategory.UNKNOWN)
 
+        # "Unknown" is not "zero": remember when altitude/speed/track were
+        # missing so the prediction engine can exclude this aircraft (it still
+        # shows up on the map). vrate missing is tolerable (level flight is the
+        # common case); the others are not.
+        telemetry_complete = on_ground or not (
+            alt_raw is None or ac.get("gs") is None or ac.get("track") is None
+        )
+
         return AircraftState(
             icao24=str(hex_id).lower(),
             latitude_deg=float(lat),
@@ -112,6 +120,7 @@ class ReadsbPointProvider(AircraftDataProvider):
             on_ground=on_ground,
             category=category,
             timestamp_utc=timestamp,
+            telemetry_complete=telemetry_complete,
         )
 
     async def get_status(self) -> ProviderStatus:

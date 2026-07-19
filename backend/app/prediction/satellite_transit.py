@@ -23,6 +23,7 @@ from typing import Optional
 
 import numpy as np
 from skyfield.api import wgs84
+from skyfield.framelib import itrs
 
 from app.astronomy.ephemeris import EphemerisService
 from app.astronomy.satellites import LoadedSatellite
@@ -57,6 +58,7 @@ class SatelliteTransit:
     subpoint_alt_m: float            # satellite geometric altitude there
     slant_range_m: float             # observer-to-satellite distance at transit
     tle_age_hours: float
+    sat_ecef_m: tuple[float, float, float] = (0.0, 0.0, 0.0)  # ECEF at transit
 
 
 def _separation_deg_array(
@@ -160,12 +162,15 @@ def find_satellite_transit(
     if transit_class in (TransitClass.NONE,):
         return None
 
-    # Sub-satellite ground point at transit (for the map corridor).
+    # Sub-satellite ground point + exact ECEF at transit (for the ground track).
     geocentric = loaded.satellite.at(_times_from_offsets(ts, when, np.array([refined_t])))
     sub = wgs84.subpoint(geocentric)
     subpoint_lat = float(np.atleast_1d(sub.latitude.degrees)[0])
     subpoint_lon = float(np.atleast_1d(sub.longitude.degrees)[0])
     subpoint_alt = float(np.atleast_1d(sub.elevation.m)[0])
+    ecef = geocentric.frame_xyz(itrs).m
+    ecef = ecef[:, 0] if ecef.ndim == 2 else ecef
+    sat_ecef = (float(ecef[0]), float(ecef[1]), float(ecef[2]))
 
     candidate = TransitCandidate(
         icao24=loaded.object_id,
@@ -189,4 +194,5 @@ def find_satellite_transit(
         subpoint_alt_m=subpoint_alt,
         slant_range_m=slant_range_m,
         tle_age_hours=_tle_age_hours(loaded.satellite, when),
+        sat_ecef_m=sat_ecef,
     )
