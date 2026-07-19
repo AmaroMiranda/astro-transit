@@ -189,6 +189,11 @@ class AircraftOut(BaseModel):
     on_ground: bool
     category: str
     age_s: float
+    # Topocentric direction as seen from the query point — lets clients (radar)
+    # plot every aircraft in the sky without redoing the geodetic geometry.
+    azimuth_deg: Optional[float] = None
+    altitude_deg: Optional[float] = None
+    distance_m: Optional[float] = None
 
 
 class NearbyOut(BaseModel):

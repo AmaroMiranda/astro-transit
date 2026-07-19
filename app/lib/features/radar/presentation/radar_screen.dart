@@ -10,8 +10,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/design_system/app_theme.dart';
-import '../../../core/network/friendly_error.dart';
+import '../../../core/providers.dart';
+import '../../map/domain/aircraft_providers.dart';
 import '../../predictions/domain/prediction_providers.dart';
+import '../../../shared/models/aircraft_state.dart';
 import '../../../shared/models/celestial_position.dart';
 import '../../../shared/models/transit_prediction.dart';
 
@@ -20,43 +22,73 @@ class RadarScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final observer = ref.watch(observerLocationProvider);
     final predictionAsync = ref.watch(predictionProvider);
+    final aircraftAsync = ref.watch(nearbyAircraftProvider);
+
+    if (observer == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Radar')),
+        body: const Center(child: Text('Localização indisponível.')),
+      );
+    }
+
+    final response = predictionAsync.valueOrNull;
+    final bodies = response?.bodies ?? const <CelestialPosition>[];
+    final predictions = response?.predictions ?? const <TransitPrediction>[];
+    final candidateIcaos =
+        predictions.map((p) => p.candidate.icao24).toSet();
+    // Every aircraft above the horizon with a known bearing (satellites/candidates
+    // that lack a live ADS-B fix are drawn from the predictions instead).
+    final aircraft = (aircraftAsync.valueOrNull ?? const <AircraftState>[])
+        .where((a) => a.altitudeDeg != null && a.altitudeDeg! > 0)
+        .toList();
+
+    final loading = predictionAsync.isLoading && aircraftAsync.isLoading;
+    final visibleCount = aircraft.length;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Radar')),
-      body: predictionAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text(friendlyErrorMessage(e))),
-        data: (response) {
-          if (response == null) {
-            return const Center(child: Text('Localização indisponível.'));
-          }
-          final candidateIcaos =
-              response.predictions.map((p) => p.candidate.icao24).toSet();
-          return SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  Expanded(
-                    child: RepaintBoundary(
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Expanded(
+                child: Stack(
+                  children: [
+                    RepaintBoundary(
                       child: CustomPaint(
                         size: Size.infinite,
                         painter: _RadarPainter(
-                          bodies: response.bodies,
-                          predictions: response.predictions,
+                          bodies: bodies,
+                          aircraft: aircraft,
+                          predictions: predictions,
                           candidateIcaos: candidateIcaos,
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  _Legend(),
-                ],
+                    if (loading)
+                      const Center(child: CircularProgressIndicator()),
+                    if (!loading && visibleCount == 0)
+                      const Align(
+                        alignment: Alignment.topCenter,
+                        child: Padding(
+                          padding: EdgeInsets.only(top: 4),
+                          child: Text(
+                            'Nenhuma aeronave acima do horizonte agora.',
+                            style: TextStyle(color: Colors.white54, fontSize: 13),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
-            ),
-          );
-        },
+              const SizedBox(height: 12),
+              _Legend(),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -64,11 +96,13 @@ class RadarScreen extends ConsumerWidget {
 
 class _RadarPainter extends CustomPainter {
   final List<CelestialPosition> bodies;
+  final List<AircraftState> aircraft;
   final List<TransitPrediction> predictions;
   final Set<String> candidateIcaos;
 
   _RadarPainter({
     required this.bodies,
+    required this.aircraft,
     required this.predictions,
     required this.candidateIcaos,
   });
@@ -99,17 +133,52 @@ class _RadarPainter extends CustomPainter {
       );
     }
 
+    // All live aircraft above the horizon: common traffic dim, transit
+    // candidates highlighted (drawn on top).
+    for (final a in aircraft) {
+      if (candidateIcaos.contains(a.icao24)) continue;
+      _paintPoint(
+        canvas,
+        center,
+        radius,
+        azimuthDeg: a.azimuthDeg!,
+        altitudeDeg: a.altitudeDeg!,
+        color: AstroColors.aircraftCommon,
+        size: 7,
+        icon: Icons.flight,
+      );
+    }
+    for (final a in aircraft) {
+      if (!candidateIcaos.contains(a.icao24)) continue;
+      _paintPoint(
+        canvas,
+        center,
+        radius,
+        azimuthDeg: a.azimuthDeg!,
+        altitudeDeg: a.altitudeDeg!,
+        color: AstroColors.aircraftCandidate,
+        size: 11,
+        icon: Icons.flight,
+      );
+    }
+
+    // Satellites (ISS/Tiangong) and any candidate without a live ADS-B fix are
+    // plotted from the prediction geometry.
+    final plottedIcaos = aircraft.map((a) => a.icao24).toSet();
     for (final prediction in predictions) {
       final c = prediction.candidate;
+      if (!prediction.isSatellite && plottedIcaos.contains(c.icao24)) continue;
       _paintPoint(
         canvas,
         center,
         radius,
         azimuthDeg: c.aircraftAzimuthDeg,
         altitudeDeg: c.aircraftAltitudeDeg,
-        color: AstroColors.aircraftCandidate,
-        size: 10,
-        icon: Icons.flight,
+        color: prediction.isSatellite
+            ? AstroColors.satellite
+            : AstroColors.aircraftCandidate,
+        size: 11,
+        icon: prediction.isSatellite ? Icons.satellite_alt : Icons.flight,
       );
     }
   }
@@ -184,7 +253,9 @@ class _RadarPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _RadarPainter oldDelegate) {
-    return oldDelegate.bodies != bodies || oldDelegate.predictions != predictions;
+    return oldDelegate.bodies != bodies ||
+        oldDelegate.aircraft != aircraft ||
+        oldDelegate.predictions != predictions;
   }
 }
 
@@ -195,10 +266,13 @@ class _Legend extends StatelessWidget {
   Widget build(BuildContext context) {
     return Wrap(
       spacing: 16,
+      runSpacing: 4,
       children: [
         _LegendItem(color: AstroColors.moon, label: 'Lua'),
         _LegendItem(color: AstroColors.sun, label: 'Sol'),
-        _LegendItem(color: AstroColors.aircraftCandidate, label: 'Aeronave candidata'),
+        _LegendItem(color: AstroColors.aircraftCommon, label: 'Aeronave'),
+        _LegendItem(color: AstroColors.aircraftCandidate, label: 'Candidata'),
+        _LegendItem(color: AstroColors.satellite, label: 'Satélite'),
       ],
     );
   }

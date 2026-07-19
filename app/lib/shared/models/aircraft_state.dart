@@ -13,6 +13,11 @@ class AircraftState {
   final bool onGround;
   final String category;
   final double ageS;
+  // Topocentric direction from the observer (query point), when provided by the
+  // backend — used by the radar to plot the aircraft in the sky.
+  final double? azimuthDeg;
+  final double? altitudeDeg;
+  final double? distanceM;
 
   const AircraftState({
     required this.icao24,
@@ -26,6 +31,9 @@ class AircraftState {
     required this.category,
     required this.ageS,
     this.callsign,
+    this.azimuthDeg,
+    this.altitudeDeg,
+    this.distanceM,
   });
 
   factory AircraftState.fromJson(Map<String, dynamic> json) {
@@ -43,6 +51,9 @@ class AircraftState {
       onGround: json['on_ground'] as bool,
       category: json['category'] as String,
       ageS: (json['age_s'] as num).toDouble(),
+      azimuthDeg: (json['azimuth_deg'] as num?)?.toDouble(),
+      altitudeDeg: (json['altitude_deg'] as num?)?.toDouble(),
+      distanceM: (json['distance_m'] as num?)?.toDouble(),
     );
   }
 }

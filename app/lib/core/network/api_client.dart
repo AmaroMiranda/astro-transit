@@ -13,7 +13,11 @@ class ApiClient {
       : dio = Dio(
           BaseOptions(
             baseUrl: baseUrl,
-            connectTimeout: const Duration(seconds: 10),
+            // The hosted backend runs on Render's free tier, which hibernates
+            // after ~15 min idle and can take 30-60s to accept the first
+            // connection again. A 10s connect timeout gave up during that cold
+            // start, so nothing loaded until the user retried repeatedly.
+            connectTimeout: const Duration(seconds: 45),
             // The prediction endpoint fans out to ADS-B providers with retry
             // and failover (RF-006): primary timeout + retry + secondary can
             // legitimately take 10-15s. An 8s receive timeout made the app
