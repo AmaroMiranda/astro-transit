@@ -483,8 +483,11 @@ class _NextOpportunityCard extends StatelessWidget {
             _ConfidenceChip(confidence: prediction.confidence),
             const SizedBox(height: 4),
             Text(
-              'Aeronave a ${(prediction.aircraftDistanceM / 1000).toStringAsFixed(1)} km · '
-              'atualizado há ${prediction.dataAgeS.toStringAsFixed(0)}s',
+              prediction.isSatellite
+                  ? 'Satélite a ${(prediction.aircraftDistanceM / 1000).toStringAsFixed(0)} km · '
+                      'efemérides de ${(prediction.dataAgeS / 3600).toStringAsFixed(0)}h'
+                  : 'Aeronave a ${(prediction.aircraftDistanceM / 1000).toStringAsFixed(1)} km · '
+                      'atualizado há ${prediction.dataAgeS.toStringAsFixed(0)}s',
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),

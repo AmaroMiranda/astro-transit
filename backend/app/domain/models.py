@@ -136,9 +136,25 @@ class TransitClass(str, Enum):
     NONE = "none"
 
 
+class TransitObjectKind(str, Enum):
+    """What kind of object is crossing the disc — an aircraft or a satellite.
+
+    The transit geometry is identical (a small body silhouetted against the disc),
+    but the data source, angular rate and confidence model differ (RF-005).
+    """
+
+    AIRCRAFT = "aircraft"
+    SATELLITE = "satellite"
+
+
 @dataclass(frozen=True)
 class TransitCandidate:
-    """Result of evaluating one aircraft against one body at its closest approach."""
+    """Result of evaluating one crossing object against one body at closest approach.
+
+    ``icao24`` is the generic object id (an ICAO24 hex for aircraft, a NORAD id string
+    for satellites). ``aircraft_radius_deg`` is the crossing object's apparent radius
+    regardless of kind — kept named for wire compatibility.
+    """
 
     icao24: str
     body: CelestialBody
@@ -151,6 +167,8 @@ class TransitCandidate:
     aircraft_altitude_deg: float
     body_azimuth_deg: float
     body_altitude_deg: float
+    object_kind: TransitObjectKind = TransitObjectKind.AIRCRAFT
+    object_label: Optional[str] = None   # human-friendly name (callsign / "ISS")
 
     @property
     def is_transit(self) -> bool:

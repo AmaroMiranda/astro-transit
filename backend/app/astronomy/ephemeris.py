@@ -93,6 +93,40 @@ class EphemerisService:
             timestamp_utc=when.astimezone(timezone.utc),
         )
 
+    @property
+    def timescale(self):
+        """The shared Skyfield timescale (reused for satellite propagation)."""
+        return self._ts
+
+    def observer_site(self, observer: ObserverLocation):
+        """The observer as a Skyfield geographic position (Earth-centred)."""
+        return wgs84.latlon(
+            observer.latitude_deg,
+            observer.longitude_deg,
+            elevation_m=observer.altitude_m,
+        )
+
+    def altaz_series(
+        self,
+        body: CelestialBody,
+        observer: ObserverLocation,
+        times,
+    ) -> tuple:
+        """Vectorized apparent topocentric alt/az/distance for a Skyfield ``Time``
+        array — used by the satellite transit engine, which must evaluate the Sun/Moon
+        at many instants alongside a fast-moving satellite. Returns
+        ``(altitude_deg, azimuth_deg, distance_m)`` as NumPy arrays.
+        """
+        site = self._earth + self.observer_site(observer)
+        target = self._eph[_BODY_TARGET[body]]
+        astrometric = site.at(times).observe(target).apparent()
+        alt, az, distance = astrometric.altaz()
+        return alt.degrees, az.degrees, distance.m
+
+    def body_radius_m(self, body: CelestialBody) -> float:
+        """Physical radius (m) of ``body``, for apparent-size computations (RF-010)."""
+        return _BODY_RADIUS_M[body]
+
     def _moon_illumination(self, t) -> float:
         """Fraction of the Moon's disc that is illuminated (0..1)."""
         from skyfield.almanac import fraction_illuminated

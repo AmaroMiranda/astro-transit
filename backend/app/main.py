@@ -15,14 +15,19 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
 from app.astronomy.ephemeris import EphemerisService
+from app.astronomy.satellites import SatelliteCatalog
 from app.core.config import get_settings
+from app.providers.adsbfi import AdsbFiProvider
 from app.providers.adsblol import AdsbLolProvider
+from app.providers.airplaneslive import AirplanesLiveProvider
 from app.providers.base import AircraftDataProvider
 from app.providers.opensky import OpenSkyProvider
 from app.providers.registry import ProviderRegistry
 from app.services.prediction_service import PredictionService
 
 _PROVIDER_FACTORIES = {
+    "airplaneslive": lambda s: AirplanesLiveProvider(timeout_s=s.provider_timeout_s),
+    "adsbfi": lambda s: AdsbFiProvider(timeout_s=s.provider_timeout_s),
     "adsblol": lambda s: AdsbLolProvider(timeout_s=s.provider_timeout_s),
     "opensky": lambda s: OpenSkyProvider(
         timeout_s=s.provider_timeout_s,
@@ -52,11 +57,25 @@ async def lifespan(app: FastAPI):
         cache_ttl_s=settings.cache_ttl_s,
         stale_after_s=settings.stale_after_s,
     )
-    app.state.prediction_service = PredictionService(app.state.ephemeris, app.state.registry)
+
+    app.state.satellites = None
+    if settings.satellites_enabled and settings.satellite_norad_ids:
+        app.state.satellites = SatelliteCatalog(
+            timescale=app.state.ephemeris.timescale,
+            norad_ids=settings.satellite_norad_ids,
+            source_url=settings.tle_source_url,
+            cache_ttl_s=settings.tle_cache_hours * 3600.0,
+        )
+
+    app.state.prediction_service = PredictionService(
+        app.state.ephemeris, app.state.registry, satellite_catalog=app.state.satellites
+    )
 
     yield
 
     await app.state.registry.aclose()
+    if app.state.satellites is not None:
+        await app.state.satellites.aclose()
 
 
 app = FastAPI(

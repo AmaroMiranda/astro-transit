@@ -113,10 +113,16 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final observerPoint = observer != null
         ? ll.LatLng(observer.latitude, observer.longitude)
         : const ll.LatLng(0, 0);
+    final predictions =
+        predictionAsync.valueOrNull?.predictions ?? const <TransitPrediction>[];
+    // Aircraft that have a probable transit — used to mark them apart from the
+    // rest of the traffic on the map (identified by ICAO24).
+    final candidateIcaos = <String>{
+      for (final p in predictions)
+        if (!p.isSatellite) p.candidate.icao24,
+    };
     final predictionsWithCorridor =
-        (predictionAsync.valueOrNull?.predictions ?? [])
-            .where((p) => p.corridor != null)
-            .toList();
+        predictions.where((p) => p.corridor != null).toList();
     final aircraft = aircraftAsync.valueOrNull ?? const <AircraftState>[];
 
     return Scaffold(
@@ -194,38 +200,73 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               ),
               MarkerLayer(
                 markers: [
+                  // Common traffic first, so highlighted candidates draw on top.
                   for (final a in aircraft)
-                    Marker(
-                      point: ll.LatLng(a.latitude, a.longitude),
-                      width: 30,
-                      height: 30,
-                      child: GestureDetector(
-                        onTap: () => _showAircraftInfo(context, a),
-                        child: Transform.rotate(
-                          angle: a.trackDeg * math.pi / 180,
-                          child: const Icon(
-                            Icons.navigation,
-                            color: AstroColors.aircraftCommon,
-                            size: 20,
+                    if (!candidateIcaos.contains(a.icao24))
+                      Marker(
+                        point: ll.LatLng(a.latitude, a.longitude),
+                        width: 30,
+                        height: 30,
+                        child: GestureDetector(
+                          onTap: () => _showAircraftInfo(context, a),
+                          child: Transform.rotate(
+                            angle: a.trackDeg * math.pi / 180,
+                            child: const Icon(
+                              Icons.navigation,
+                              color: AstroColors.aircraftCommon,
+                              size: 20,
+                            ),
                           ),
                         ),
                       ),
-                    ),
+                  // Aircraft with a probable transit: highlighted with a ring.
+                  for (final a in aircraft)
+                    if (candidateIcaos.contains(a.icao24))
+                      Marker(
+                        point: ll.LatLng(a.latitude, a.longitude),
+                        width: 40,
+                        height: 40,
+                        child: GestureDetector(
+                          onTap: () => _showAircraftInfo(context, a),
+                          child: _CandidateAircraftMarker(trackDeg: a.trackDeg),
+                        ),
+                      ),
+                  // Satellite crossing points (ISS, Tiangong) at their transit point.
                   for (final p in predictionsWithCorridor)
-                    Marker(
-                      point: ll.LatLng(
-                        p.corridor!.centerLatitude,
-                        p.corridor!.centerLongitude,
+                    if (p.isSatellite)
+                      Marker(
+                        point: ll.LatLng(
+                          p.corridor!.centerLatitude,
+                          p.corridor!.centerLongitude,
+                        ),
+                        width: 40,
+                        height: 40,
+                        child: GestureDetector(
+                          onTap: () => _showPredictionInfo(context, p),
+                          child: const Icon(
+                            Icons.satellite_alt,
+                            color: AstroColors.satellite,
+                            size: 28,
+                          ),
+                        ),
                       ),
-                      width: 32,
-                      height: 32,
-                      child: Icon(
-                        Icons.center_focus_strong,
-                        color: p.candidate.body == CelestialBody.moon
-                            ? AstroColors.moon
-                            : AstroColors.sun,
+                  // Aircraft transit ground-crossing points.
+                  for (final p in predictionsWithCorridor)
+                    if (!p.isSatellite)
+                      Marker(
+                        point: ll.LatLng(
+                          p.corridor!.centerLatitude,
+                          p.corridor!.centerLongitude,
+                        ),
+                        width: 32,
+                        height: 32,
+                        child: Icon(
+                          Icons.center_focus_strong,
+                          color: p.candidate.body == CelestialBody.moon
+                              ? AstroColors.moon
+                              : AstroColors.sun,
+                        ),
                       ),
-                    ),
                   if (observer != null)
                     Marker(
                       point: observerPoint,
@@ -349,14 +390,17 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 ),
               ),
             )
-          else if (predictionsWithCorridor.isNotEmpty)
+          else if (predictions.isNotEmpty)
             Positioned(
               left: 0,
               right: 0,
               bottom: 0,
               child: SafeArea(
                 minimum: const EdgeInsets.all(12),
-                child: _CorridorInfoCard(prediction: predictionsWithCorridor.first),
+                child: _TransitListCard(
+                  predictions: predictions,
+                  onFocus: _focusPrediction,
+                ),
               ),
             ),
         ],
@@ -375,6 +419,38 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         ),
         duration: const Duration(seconds: 3),
       ),
+    );
+  }
+
+  /// Pan/zoom the map to a probable transit and open its detail sheet. Aircraft
+  /// are focused on their live position; satellites on their transit ground point.
+  void _focusPrediction(TransitPrediction p) {
+    ll.LatLng? target;
+    if (!p.isSatellite) {
+      final aircraft =
+          ref.read(nearbyAircraftProvider).valueOrNull ?? const <AircraftState>[];
+      for (final a in aircraft) {
+        if (a.icao24 == p.candidate.icao24) {
+          target = ll.LatLng(a.latitude, a.longitude);
+          break;
+        }
+      }
+    }
+    target ??= p.corridor != null
+        ? ll.LatLng(p.corridor!.centerLatitude, p.corridor!.centerLongitude)
+        : null;
+    if (target != null) {
+      final zoom = math.max(_mapController.camera.zoom, 11.0);
+      _mapController.move(target, zoom);
+    }
+    _showPredictionInfo(context, p);
+  }
+
+  void _showPredictionInfo(BuildContext context, TransitPrediction p) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (_) => _PredictionDetailSheet(prediction: p),
     );
   }
 }
@@ -449,6 +525,208 @@ class _CorridorInfoCard extends StatelessWidget {
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _bodyLabel(CelestialBody body) =>
+    body == CelestialBody.moon ? 'Lua' : 'Sol';
+
+String _timeToTransitLabel(double seconds) {
+  final s = seconds.round();
+  if (s < 60) return 'em ${s}s';
+  final m = s ~/ 60;
+  final rem = s % 60;
+  return rem == 0 ? 'em ${m}min' : 'em ${m}min ${rem}s';
+}
+
+/// Highlighted marker for an aircraft with a probable transit: a ring around a
+/// track-rotated arrow, in the candidate colour.
+class _CandidateAircraftMarker extends StatelessWidget {
+  final double trackDeg;
+
+  const _CandidateAircraftMarker({required this.trackDeg});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: AstroColors.aircraftCandidate.withValues(alpha: 0.18),
+        border: Border.all(color: AstroColors.aircraftCandidate, width: 2),
+      ),
+      child: Center(
+        child: Transform.rotate(
+          angle: trackDeg * math.pi / 180,
+          child: const Icon(
+            Icons.navigation,
+            color: AstroColors.aircraftCandidate,
+            size: 20,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Bottom card listing *only* the objects with a probable transit — aircraft and
+/// satellites (ISS/Tiangong) alike. Tapping a row focuses it on the map.
+class _TransitListCard extends StatelessWidget {
+  final List<TransitPrediction> predictions;
+  final void Function(TransitPrediction) onFocus;
+
+  const _TransitListCard({required this.predictions, required this.onFocus});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.track_changes, size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  'Trânsitos prováveis (${predictions.length})',
+                  style: theme.textTheme.titleSmall,
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.32,
+              ),
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: predictions.length,
+                separatorBuilder: (_, _) => const Divider(height: 1),
+                itemBuilder: (_, i) => _TransitListTile(
+                  prediction: predictions[i],
+                  onTap: () => onFocus(predictions[i]),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TransitListTile extends StatelessWidget {
+  final TransitPrediction prediction;
+  final VoidCallback onTap;
+
+  const _TransitListTile({required this.prediction, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final c = prediction.candidate;
+    final isMoon = c.body == CelestialBody.moon;
+    final isSat = prediction.isSatellite;
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      dense: true,
+      leading: Icon(
+        isSat ? Icons.satellite_alt : Icons.flight,
+        color: isSat ? AstroColors.satellite : AstroColors.aircraftCandidate,
+      ),
+      title: Text(
+        prediction.displayLabel,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: Text(
+        '${transitClassLabel(c.transitClass)} · '
+        '${_bodyLabel(c.body)} · ${_timeToTransitLabel(c.timeToTransitS)}',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: isMoon ? AstroColors.moon : AstroColors.sun,
+        ),
+      ),
+      trailing: Text(
+        '${prediction.confidence.score.round()}%',
+        style: theme.textTheme.labelLarge,
+      ),
+      onTap: onTap,
+    );
+  }
+}
+
+/// Detail sheet for a single probable transit (opened from the map or the list).
+class _PredictionDetailSheet extends StatelessWidget {
+  final TransitPrediction prediction;
+
+  const _PredictionDetailSheet({required this.prediction});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final c = prediction.candidate;
+    final isSat = prediction.isSatellite;
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  isSat ? Icons.satellite_alt : Icons.flight,
+                  color: isSat
+                      ? AstroColors.satellite
+                      : AstroColors.aircraftCandidate,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(prediction.displayLabel,
+                      style: theme.textTheme.titleMedium),
+                ),
+                Text('${prediction.confidence.score.round()}%',
+                    style: theme.textTheme.titleMedium),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${transitClassLabel(c.transitClass)} diante da '
+              '${_bodyLabel(c.body)} · ${_timeToTransitLabel(c.timeToTransitS)}',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: c.body == CelestialBody.moon
+                    ? AstroColors.moon
+                    : AstroColors.sun,
+              ),
+            ),
+            Text(
+              'Confiança: ${confidenceCategoryLabel(prediction.confidence.category)}',
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+            if (isSat)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  'Satélite — posição calculada por efemérides orbitais (TLE).',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                ),
+              ),
+            if (prediction.corridor != null) ...[
+              const SizedBox(height: 12),
+              _CorridorInfoCard(prediction: prediction),
+            ],
           ],
         ),
       ),

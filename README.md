@@ -19,8 +19,9 @@ backend próprio ou local rodando (veja "Configurando o backend em build de rele
 
 ```
 Flutter App  ──HTTPS/WebSocket──►  FastAPI Backend
-                                     ├── astronomia (Skyfield)
-                                     ├── provedores ADS-B (OpenSky / ADSB.lol / ...)
+                                     ├── astronomia (Skyfield: Sol/Lua + satélites TLE)
+                                     ├── provedores ADS-B (airplanes.live / adsb.fi / ADSB.lol / OpenSky)
+                                     ├── satélites (ISS + Tiangong, TLE via Celestrak)
                                      ├── motor de previsão de trânsito
                                      └── motor de confiança
 ```
@@ -72,8 +73,10 @@ uma vez e mantida localmente em `app/astronomy/_data/`.
 
 | Módulo | Responsabilidade | SPEC |
 |--------|------------------|------|
-| `providers/base.py`, `adsblol.py`, `opensky.py` | Provedores ADS-B normalizados | RF-004/005 |
+| `providers/readsb.py`, `airplaneslive.py`, `adsbfi.py`, `adsblol.py`, `opensky.py` | Provedores ADS-B normalizados (readsb + OpenSky) | RF-004/005 |
 | `providers/registry.py` | Cache + failover entre provedores | RF-006 |
+| `astronomy/satellites.py` | Catálogo de satélites (TLE Celestrak + cache) — ISS, Tiangong | RF-005 |
+| `prediction/satellite_transit.py` | Trânsito de satélite (propagação SGP4 vetorizada, Skyfield) | RF-012/013 |
 | `confidence/scoring.py` | Pontuação de confiança 0-100 com fatores | RF-016 |
 | `services/prediction_service.py` | Orquestra pré-filtro → candidatos → confiança | seção 10 |
 | `api/v1/*.py` | `GET /v1/astronomy/position`, `GET /v1/aircraft/nearby`, `POST /v1/transits/predict`, `WS /v1/transits/live` | seção 14 |

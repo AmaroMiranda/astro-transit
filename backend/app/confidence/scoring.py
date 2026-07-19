@@ -135,3 +135,74 @@ def score_candidate(
         category=categorize(score),
         factors=tuple(factors),
     )
+
+
+@dataclass(frozen=True)
+class SatelliteConfidenceInputs:
+    """Confidence drivers specific to a TLE-propagated satellite transit.
+
+    A satellite's position is *predicted* from orbital elements, not sampled over
+    ADS-B, so the aircraft penalties (distance, single track point, GPS positional
+    error) don't apply. Precision is instead governed by how fresh the TLE is and how
+    low the pass sits in the sky (atmospheric refraction + timing sensitivity grow
+    near the horizon), plus how central the crossing is.
+    """
+
+    tle_age_hours: float
+    altitude_deg: float
+    gps_accuracy_m: Optional[float] = None
+
+
+def score_satellite_candidate(
+    candidate: TransitCandidate, inputs: SatelliteConfidenceInputs
+) -> ConfidenceResult:
+    """Score a satellite transit candidate 0-100 with itemized penalties (RF-016)."""
+    factors: list[ConfidenceFactor] = []
+
+    def penalize(name: str, penalty: float, detail: str) -> None:
+        if penalty > 0:
+            factors.append(ConfidenceFactor(name, penalty, detail))
+
+    # 1) TLE freshness — the dominant driver for orbital predictions.
+    age_h = inputs.tle_age_hours
+    if age_h > 72:
+        penalize("tle_age", 40, f"Efemérides (TLE) de {age_h / 24:.0f} dias")
+    elif age_h > 36:
+        penalize("tle_age", 22, f"Efemérides (TLE) de {age_h:.0f} h")
+    elif age_h > 18:
+        penalize("tle_age", 10, f"Efemérides (TLE) de {age_h:.0f} h")
+    elif age_h > 8:
+        penalize("tle_age", 4, f"Efemérides (TLE) de {age_h:.0f} h")
+
+    # 2) Elevation — low passes are geometrically fragile and often blocked.
+    alt = inputs.altitude_deg
+    if alt < 10:
+        penalize("low_pass", 25, f"Passagem baixa ({alt:.0f}° acima do horizonte)")
+    elif alt < 20:
+        penalize("low_pass", 12, f"Passagem a {alt:.0f}° de altura")
+    elif alt < 30:
+        penalize("low_pass", 4, f"Passagem a {alt:.0f}° de altura")
+
+    # 3) Observer GPS accuracy — the satellite path is only a few km wide on the
+    #    ground, so where you stand matters.
+    acc = inputs.gps_accuracy_m
+    if acc is not None:
+        if acc > 50:
+            penalize("gps", 12, f"GPS ±{acc:.0f} m")
+        elif acc > 20:
+            penalize("gps", 5, f"GPS ±{acc:.0f} m")
+
+    # 4) How central the crossing is.
+    if candidate.body_radius_deg > 0:
+        margin = 1.0 - min(candidate.min_separation_deg / candidate.body_radius_deg, 1.0)
+        if margin < 0.1:
+            penalize("graze", 12, "Passagem próxima à borda do disco")
+        elif margin < 0.3:
+            penalize("edge", 5, "Trânsito não central")
+
+    score = max(0.0, 100.0 - sum(f.penalty for f in factors))
+    return ConfidenceResult(
+        score=score,
+        category=categorize(score),
+        factors=tuple(factors),
+    )

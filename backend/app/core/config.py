@@ -18,8 +18,9 @@ class Settings(BaseSettings):
     # Prediction horizon (RF-007)
     default_horizon_s: float = 120.0
 
-    # Provider selection & failover (RF-005/006)
-    aircraft_providers: list[str] = ["adsblol", "opensky"]
+    # Provider selection & failover (RF-005/006). airplanes.live and adsb.fi lead
+    # for their community-feeder coverage over Brazil; adsb.lol/OpenSky back them up.
+    aircraft_providers: list[str] = ["airplaneslive", "adsbfi", "adsblol", "opensky"]
     provider_timeout_s: float = 4.0
     cache_ttl_s: float = 5.0
     stale_after_s: float = 20.0  # beyond this, high-confidence alerts are suppressed
@@ -27,6 +28,13 @@ class Settings(BaseSettings):
     # Optional OpenSky OAuth2 credentials (leave empty to use the anonymous tier)
     opensky_client_id: str = ""
     opensky_client_secret: str = ""
+
+    # Satellite transits (ISS + Tiangong/CSS). NORAD catalogue ids; TLEs are fetched
+    # from Celestrak and cached, then propagated with Skyfield.
+    satellites_enabled: bool = True
+    satellite_norad_ids: list[int] = [25544, 48274]  # ISS (ZARYA), CSS (TIANHE)
+    tle_source_url: str = "https://celestrak.org/NORAD/elements/gp.php"
+    tle_cache_hours: float = 6.0
 
 
 @lru_cache(maxsize=1)

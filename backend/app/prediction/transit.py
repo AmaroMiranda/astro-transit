@@ -80,7 +80,7 @@ def _golden_section_min(
     return (a + b) / 2.0
 
 
-def _classify(
+def classify_transit(
     min_sep_deg: float, body_radius_deg: float, aircraft_radius_deg: float, margin_deg: float
 ) -> TransitClass:
     threshold = body_radius_deg + aircraft_radius_deg + margin_deg
@@ -146,7 +146,7 @@ def find_transit_candidate(
     wingspan = CATEGORY_WINGSPAN_M[state.category]
     aircraft_radius_deg = angular_size_deg(wingspan, topo.range_m) / 2.0
 
-    transit_class = _classify(
+    transit_class = classify_transit(
         sample.separation_deg, body.angular_radius_deg, aircraft_radius_deg, margin_deg
     )
 

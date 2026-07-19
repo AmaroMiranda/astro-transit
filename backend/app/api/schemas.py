@@ -17,6 +17,7 @@ from app.domain.models import (
     CelestialPosition,
     TransitCandidate,
     TransitClass,
+    TransitObjectKind,
 )
 from app.services.prediction_service import PredictionResponse, TransitPrediction
 
@@ -98,6 +99,8 @@ class TransitCandidateOut(BaseModel):
     transit_class: TransitClass
     aircraft_azimuth_deg: float
     aircraft_altitude_deg: float
+    object_kind: TransitObjectKind = TransitObjectKind.AIRCRAFT
+    object_label: Optional[str] = None
 
     @classmethod
     def of(cls, c: TransitCandidate) -> "TransitCandidateOut":
@@ -111,6 +114,8 @@ class TransitCandidateOut(BaseModel):
             transit_class=c.transit_class,
             aircraft_azimuth_deg=round(c.aircraft_azimuth_deg, 3),
             aircraft_altitude_deg=round(c.aircraft_altitude_deg, 3),
+            object_kind=c.object_kind,
+            object_label=c.object_label,
         )
 
 

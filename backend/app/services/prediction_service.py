@@ -12,10 +12,13 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from app.astronomy.ephemeris import EphemerisService
+from app.astronomy.satellites import SatelliteCatalog
 from app.confidence.scoring import (
     ConfidenceInputs,
     ConfidenceResult,
+    SatelliteConfidenceInputs,
     score_candidate,
+    score_satellite_candidate,
 )
 from app.domain.models import (
     AircraftState,
@@ -23,11 +26,13 @@ from app.domain.models import (
     CelestialPosition,
     ObserverLocation,
     TransitCandidate,
+    TransitObjectKind,
 )
 from app.geometry.angles import angular_separation_deg
 from app.geometry.coordinates import observer_relative
 from app.geometry.corridor import CorridorEstimate, estimate_corridor
 from app.prediction.projection import project_state
+from app.prediction.satellite_transit import find_satellite_transit
 from app.prediction.transit import find_transit_candidate
 from app.providers.registry import AircraftFetchResult, ProviderRegistry
 
@@ -63,9 +68,15 @@ class PredictionResponse:
 
 
 class PredictionService:
-    def __init__(self, ephemeris: EphemerisService, registry: ProviderRegistry):
+    def __init__(
+        self,
+        ephemeris: EphemerisService,
+        registry: ProviderRegistry,
+        satellite_catalog: Optional[SatelliteCatalog] = None,
+    ):
         self._ephemeris = ephemeris
         self._registry = registry
+        self._satellites = satellite_catalog
 
     def _passes_prefilter(
         self,
@@ -101,6 +112,68 @@ class PredictionService:
             if sep <= _PREFILTER_CONE_DEG:
                 return True
         return False
+
+    async def _predict_satellites(
+        self,
+        observer: ObserverLocation,
+        visible_bodies: list[CelestialPosition],
+        when: datetime,
+        horizon_s: float,
+    ) -> list[TransitPrediction]:
+        """Transits of the tracked satellites (ISS, Tiangong) across the visible
+        bodies. TLE fetching is best-effort: a network failure yields no satellite
+        predictions rather than failing the whole request.
+        """
+        if self._satellites is None:
+            return []
+        try:
+            satellites = await self._satellites.get_satellites()
+        except Exception:  # pragma: no cover - defensive; catalog already guards fetch
+            return []
+
+        results: list[TransitPrediction] = []
+        for loaded in satellites:
+            for body in visible_bodies:
+                st = find_satellite_transit(
+                    loaded, body.body, self._ephemeris, observer, when, horizon_s=horizon_s
+                )
+                if st is None or not st.candidate.is_transit:
+                    continue
+
+                confidence = score_satellite_candidate(
+                    st.candidate,
+                    SatelliteConfidenceInputs(
+                        tle_age_hours=st.tle_age_hours,
+                        altitude_deg=st.candidate.aircraft_altitude_deg,
+                        gps_accuracy_m=observer.horizontal_accuracy_m,
+                    ),
+                )
+
+                corridor = None
+                try:
+                    corridor = estimate_corridor(
+                        observer,
+                        body,
+                        aircraft_lat_deg=st.subpoint_lat_deg,
+                        aircraft_lon_deg=st.subpoint_lon_deg,
+                        aircraft_altitude_m=st.subpoint_alt_m,
+                        aircraft_radius_deg=st.candidate.aircraft_radius_deg,
+                        margin_deg=_CORRIDOR_MARGIN_DEG,
+                    )
+                except (ValueError, ZeroDivisionError):
+                    pass
+
+                results.append(
+                    TransitPrediction(
+                        candidate=st.candidate,
+                        confidence=confidence,
+                        callsign=st.candidate.object_label,
+                        aircraft_distance_m=st.slant_range_m,
+                        data_age_s=st.tle_age_hours * 3600.0,
+                        corridor=corridor,
+                    )
+                )
+        return results
 
     async def predict(
         self,
@@ -189,6 +262,12 @@ class PredictionService:
                         corridor=corridor,
                     )
                 )
+
+        # Satellite transits (ISS, Tiangong) cross the same visible bodies via
+        # orbital propagation rather than ADS-B projection.
+        predictions.extend(
+            await self._predict_satellites(observer, visible_bodies, when, horizon_s)
+        )
 
         # Soonest, most-confident first.
         predictions.sort(

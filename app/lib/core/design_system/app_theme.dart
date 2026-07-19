@@ -18,6 +18,7 @@ class AstroColors {
   static const moon = Color(0xFFE8E0C0);
   static const aircraftCommon = Color(0xFF7C8AA8);
   static const aircraftCandidate = Color(0xFF5EC2FF);
+  static const satellite = Color(0xFFB98BFF);
 
   static const success = Color(0xFF3DDC84);
   static const warning = Color(0xFFFFC24B);

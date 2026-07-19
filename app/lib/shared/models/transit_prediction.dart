@@ -4,6 +4,14 @@ library;
 
 import 'celestial_position.dart';
 
+enum TransitObjectKind { aircraft, satellite }
+
+TransitObjectKind transitObjectKindFromWire(String? value) {
+  return value == 'satellite'
+      ? TransitObjectKind.satellite
+      : TransitObjectKind.aircraft;
+}
+
 enum TransitClass { central, nearCentral, partial, graze, approach, none }
 
 TransitClass transitClassFromWire(String value) {
@@ -124,6 +132,8 @@ class TransitCandidate {
   final TransitClass transitClass;
   final double aircraftAzimuthDeg;
   final double aircraftAltitudeDeg;
+  final TransitObjectKind objectKind;
+  final String? objectLabel;
 
   const TransitCandidate({
     required this.icao24,
@@ -135,7 +145,11 @@ class TransitCandidate {
     required this.transitClass,
     required this.aircraftAzimuthDeg,
     required this.aircraftAltitudeDeg,
+    this.objectKind = TransitObjectKind.aircraft,
+    this.objectLabel,
   });
+
+  bool get isSatellite => objectKind == TransitObjectKind.satellite;
 
   factory TransitCandidate.fromJson(Map<String, dynamic> json) {
     return TransitCandidate(
@@ -148,6 +162,8 @@ class TransitCandidate {
       transitClass: transitClassFromWire(json['transit_class'] as String),
       aircraftAzimuthDeg: (json['aircraft_azimuth_deg'] as num).toDouble(),
       aircraftAltitudeDeg: (json['aircraft_altitude_deg'] as num).toDouble(),
+      objectKind: transitObjectKindFromWire(json['object_kind'] as String?),
+      objectLabel: json['object_label'] as String?,
     );
   }
 }
@@ -194,6 +210,13 @@ class TransitPrediction {
     this.callsign,
     this.corridor,
   });
+
+  bool get isSatellite => candidate.isSatellite;
+
+  /// Human-friendly name: a satellite's label, an aircraft's callsign, or the
+  /// raw object id as a last resort.
+  String get displayLabel =>
+      candidate.objectLabel ?? callsign ?? candidate.icao24;
 
   factory TransitPrediction.fromJson(Map<String, dynamic> json) {
     final rawCorridor = json['corridor'] as Map<String, dynamic>?;
