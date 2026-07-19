@@ -1,11 +1,13 @@
-/// AstroTransit design tokens and themes (SPEC section 15).
+/// AstroTransit design tokens and themes — "Celestial Precision" (SPEC section 15).
 ///
-/// Three modes: dark (default, for night observation), light (daytime / solar
-/// use) and a low-brightness "red mode" that preserves night vision (RF-019,
-/// section 15.2).
+/// A premium, scientific, accessible astronomy interface. Three observation modes:
+/// dark ("Observatório", default night use), light ("Solar", high legibility under
+/// bright light) and red ("Visão noturna", minimal brightness / no blue to preserve
+/// dark adaptation) — RF-019, section 15.2.
 library;
 
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 enum AppThemeMode { dark, light, red }
 
@@ -14,16 +16,36 @@ enum AppThemeMode { dark, light, red }
 class AstroColors {
   AstroColors._();
 
-  static const sun = Color(0xFFFFC169);
-  static const moon = Color(0xFFE8E0C0);
-  static const aircraftCommon = Color(0xFF7C8AA8);
-  static const aircraftCandidate = Color(0xFF5EC2FF);
-  static const satellite = Color(0xFFB98BFF);
+  // --- Celestial Precision palette -----------------------------------------
+  static const deepSpace = Color(0xFF050914); // fundo principal
+  static const orbitalSurface = Color(0xFF0D1729); // cards / superfícies
+  static const surfaceElevated = Color(0xFF111F35); // componentes destacados
+  static const border = Color(0xFF213553); // contornos e divisores
+  static const transitCyan = Color(0xFF66D6FF); // ação principal / navegação
+  static const lunarIvory = Color(0xFFECE5C9); // Lua
+  static const solarAmber = Color(0xFFFFC56C); // Sol
+  static const confidenceGreen = Color(0xFF50DFA1); // confiança alta
+  static const telemetry = Color(0xFF9AACC9); // texto secundário
+  static const critical = Color(0xFFFF756F); // erros / gravação
 
-  static const success = Color(0xFF3DDC84);
-  static const warning = Color(0xFFFFC24B);
-  static const error = Color(0xFFFF6259);
-  static const info = Color(0xFF5EC2FF);
+  // --- Semantic aliases (stable names used across the app) -----------------
+  static const sun = solarAmber;
+  static const moon = lunarIvory;
+  static const aircraftCandidate = transitCyan;
+  static const aircraftCommon = Color(0xFF5B6C89); // tráfego comum (dim)
+  static const satellite = Color(0xFFB98BFF); // ISS / Tiangong
+  static const success = confidenceGreen;
+  static const warning = solarAmber;
+  static const error = critical;
+  static const info = transitCyan;
+}
+
+/// Shared geometry tokens (8-pt system, generous radii).
+class AstroRadii {
+  AstroRadii._();
+  static const card = 24.0;
+  static const button = 16.0;
+  static const chip = 999.0;
 }
 
 class AppTheme {
@@ -40,101 +62,169 @@ class AppTheme {
     }
   }
 
-  static final _tabularNums = const TextStyle(
-    fontFeatures: [FontFeature.tabularFigures()],
-  );
-
+  /// Big tabular-figure countdown (RF-018): weight 800, no jitter as digits change.
   static TextStyle countdownStyle(BuildContext context, {required Color color}) {
-    return _tabularNums.copyWith(
+    return GoogleFonts.manrope(
       fontSize: 56,
-      fontWeight: FontWeight.w700,
+      fontWeight: FontWeight.w800,
       color: color,
-      letterSpacing: -1,
+      letterSpacing: -1.5,
+      fontFeatures: const [FontFeature.tabularFigures()],
     );
   }
 
+  /// Uppercase, letter-spaced technical section label (10–12 px).
+  static TextStyle sectionLabelStyle(BuildContext context, {Color? color}) {
+    return GoogleFonts.manrope(
+      fontSize: 12,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 1.6,
+      color: color ?? Theme.of(context).colorScheme.primary,
+    );
+  }
+
+  static TextTheme _textTheme(Brightness brightness) {
+    final base = brightness == Brightness.dark
+        ? ThemeData.dark().textTheme
+        : ThemeData.light().textTheme;
+    return GoogleFonts.manropeTextTheme(base).copyWith(
+      headlineLarge: GoogleFonts.manrope(
+          fontWeight: FontWeight.w800, letterSpacing: -0.5),
+      headlineMedium: GoogleFonts.manrope(
+          fontWeight: FontWeight.w800, letterSpacing: -0.5),
+      headlineSmall: GoogleFonts.manrope(fontWeight: FontWeight.w800),
+      titleLarge: GoogleFonts.manrope(fontWeight: FontWeight.w700),
+      titleMedium: GoogleFonts.manrope(fontWeight: FontWeight.w700),
+      titleSmall: GoogleFonts.manrope(fontWeight: FontWeight.w700),
+    );
+  }
+
+  static CardThemeData _cardTheme(Color color, Color border) => CardThemeData(
+        color: color,
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AstroRadii.card),
+          side: BorderSide(color: border),
+        ),
+      );
+
+  // Primary buttons: min height 52, radius 16, weight 700, never wrap.
+  static FilledButtonThemeData _filledButtons() => FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          minimumSize: const Size(64, 52),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AstroRadii.button),
+          ),
+          textStyle: GoogleFonts.manrope(
+              fontSize: 15, fontWeight: FontWeight.w700),
+        ),
+      );
+
+  static OutlinedButtonThemeData _outlinedButtons(Color side) =>
+      OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size(64, 52),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AstroRadii.button),
+          ),
+          side: BorderSide(color: side),
+          textStyle: GoogleFonts.manrope(
+              fontSize: 15, fontWeight: FontWeight.w700),
+        ),
+      );
+
+  // ------------------------------------------------------------------ dark ---
   static final ColorScheme _darkScheme = ColorScheme.fromSeed(
-    seedColor: AstroColors.aircraftCandidate,
+    seedColor: AstroColors.transitCyan,
     brightness: Brightness.dark,
-    surface: const Color(0xFF0B1020),
+  ).copyWith(
+    primary: AstroColors.transitCyan,
+    onPrimary: AstroColors.deepSpace,
+    secondary: AstroColors.confidenceGreen,
+    onSecondary: AstroColors.deepSpace,
+    surface: AstroColors.orbitalSurface,
+    onSurface: const Color(0xFFE8EEFB),
+    onSurfaceVariant: AstroColors.telemetry,
+    outline: AstroColors.border,
+    error: AstroColors.critical,
   );
 
   static final _dark = ThemeData(
     useMaterial3: true,
     brightness: Brightness.dark,
     colorScheme: _darkScheme,
-    scaffoldBackgroundColor: const Color(0xFF05070F),
-    cardTheme: CardThemeData(
-      color: const Color(0xFF111A31),
-      elevation: 0,
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: const BorderSide(color: Color(0xFF223052)),
+    scaffoldBackgroundColor: AstroColors.deepSpace,
+    textTheme: _textTheme(Brightness.dark),
+    cardTheme: _cardTheme(AstroColors.orbitalSurface, AstroColors.border),
+    filledButtonTheme: _filledButtons(),
+    outlinedButtonTheme: _outlinedButtons(const Color(0xFF2E4166)),
+    dividerTheme: const DividerThemeData(color: AstroColors.border, thickness: 1),
+    navigationBarTheme: NavigationBarThemeData(
+      backgroundColor: AstroColors.orbitalSurface,
+      indicatorColor: AstroColors.transitCyan.withValues(alpha: 0.16),
+      labelTextStyle: WidgetStatePropertyAll(
+        GoogleFonts.manrope(fontSize: 12, fontWeight: FontWeight.w600),
       ),
     ),
-    filledButtonTheme: FilledButtonThemeData(
-      style: FilledButton.styleFrom(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-      ),
-    ),
-    outlinedButtonTheme: OutlinedButtonThemeData(
-      style: OutlinedButton.styleFrom(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        side: const BorderSide(color: Color(0xFF2E3D63)),
-      ),
-    ),
-    appBarTheme: const AppBarTheme(
+    appBarTheme: AppBarTheme(
       backgroundColor: Colors.transparent,
       elevation: 0,
       centerTitle: false,
-      titleTextStyle: TextStyle(
+      titleTextStyle: GoogleFonts.manrope(
         fontSize: 20,
-        fontWeight: FontWeight.w700,
-        color: Color(0xFFEAF0FF),
+        fontWeight: FontWeight.w800,
+        color: const Color(0xFFEAF0FF),
       ),
     ),
   );
 
+  // ----------------------------------------------------------------- light ---
   static final ColorScheme _lightScheme = ColorScheme.fromSeed(
-    seedColor: const Color(0xFF2E6FB5),
+    seedColor: const Color(0xFF1C7FB8),
     brightness: Brightness.light,
+  ).copyWith(
+    primary: const Color(0xFF0E6CA6),
+    secondary: const Color(0xFF1C9E6B),
+    surface: Colors.white,
+    onSurfaceVariant: const Color(0xFF52627C),
+    outline: const Color(0xFFCBD5E6),
   );
 
   static final _light = ThemeData(
     useMaterial3: true,
     brightness: Brightness.light,
     colorScheme: _lightScheme,
-    scaffoldBackgroundColor: const Color(0xFFEEF1F8),
-    cardTheme: CardThemeData(
-      color: Colors.white,
+    scaffoldBackgroundColor: const Color(0xFFEEF2F8),
+    textTheme: _textTheme(Brightness.light),
+    cardTheme: _cardTheme(Colors.white, const Color(0xFFDCE3F0)),
+    filledButtonTheme: _filledButtons(),
+    outlinedButtonTheme: _outlinedButtons(const Color(0xFFCBD5E6)),
+    appBarTheme: AppBarTheme(
+      backgroundColor: Colors.transparent,
       elevation: 0,
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: const BorderSide(color: Color(0xFFDDE3F0)),
-      ),
-    ),
-    filledButtonTheme: FilledButtonThemeData(
-      style: FilledButton.styleFrom(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-      ),
-    ),
-    outlinedButtonTheme: OutlinedButtonThemeData(
-      style: OutlinedButton.styleFrom(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      centerTitle: false,
+      titleTextStyle: GoogleFonts.manrope(
+        fontSize: 20,
+        fontWeight: FontWeight.w800,
+        color: const Color(0xFF0B1B2E),
       ),
     ),
   );
 
-  // Red mode: minimizes blue light and overall brightness to preserve dark
-  // adaptation during night observation sessions (section 15.2).
+  // ------------------------------------------------------------------- red ---
+  // Minimizes blue light and overall brightness to preserve dark adaptation
+  // during night observation sessions (section 15.2).
   static final ColorScheme _redScheme = ColorScheme.fromSeed(
     seedColor: const Color(0xFFB5342E),
     brightness: Brightness.dark,
-    surface: const Color(0xFF120404),
+    surface: const Color(0xFF140505),
+  ).copyWith(
+    primary: const Color(0xFFE0564E),
+    onPrimary: const Color(0xFF120303),
+    onSurface: const Color(0xFFD9564E),
+    onSurfaceVariant: const Color(0xFFA84139),
+    outline: const Color(0xFF3A1210),
   );
 
   static final _red = ThemeData(
@@ -142,24 +232,12 @@ class AppTheme {
     brightness: Brightness.dark,
     colorScheme: _redScheme,
     scaffoldBackgroundColor: const Color(0xFF0A0202),
-    cardTheme: CardThemeData(
-      color: const Color(0xFF1A0707),
-      elevation: 0,
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: const BorderSide(color: Color(0xFF3A1210)),
-      ),
+    textTheme: _textTheme(Brightness.dark).apply(
+      bodyColor: const Color(0xFFCC4A42),
+      displayColor: const Color(0xFFCC4A42),
     ),
-    filledButtonTheme: FilledButtonThemeData(
-      style: FilledButton.styleFrom(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-      ),
-    ),
-    textTheme: ThemeData.dark().textTheme.apply(
-          bodyColor: const Color(0xFFCC4A42),
-          displayColor: const Color(0xFFCC4A42),
-        ),
+    cardTheme: _cardTheme(const Color(0xFF1A0707), const Color(0xFF3A1210)),
+    filledButtonTheme: _filledButtons(),
+    outlinedButtonTheme: _outlinedButtons(const Color(0xFF4A1613)),
   );
 }

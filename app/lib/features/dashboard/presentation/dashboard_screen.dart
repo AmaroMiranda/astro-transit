@@ -9,6 +9,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/design_system/app_theme.dart';
 import '../../../core/network/friendly_error.dart';
@@ -212,7 +213,7 @@ class _Header extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0xFF1B2440), Color(0xFF0E1528), Color(0xFF05070F)],
+          colors: [Color(0xFF0B1730), Color(0xFF081020), AstroColors.deepSpace],
         ),
       ),
       child: SafeArea(
@@ -225,21 +226,21 @@ class _Header extends StatelessWidget {
               Row(
                 children: [
                   Expanded(
-                    child: RichText(
-                      text: const TextSpan(
-                        style: TextStyle(
+                    child: Text.rich(
+                      TextSpan(
+                        style: GoogleFonts.manrope(
                           fontSize: 26,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w800,
                           letterSpacing: -0.5,
                         ),
-                        children: [
+                        children: const [
                           TextSpan(
                             text: 'Astro',
                             style: TextStyle(color: Color(0xFFEAF0FF)),
                           ),
                           TextSpan(
                             text: 'Transit',
-                            style: TextStyle(color: Color(0xFF5EC2FF)),
+                            style: TextStyle(color: AstroColors.transitCyan),
                           ),
                         ],
                       ),
@@ -860,14 +861,7 @@ class _SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Text(
-      text,
-      style: theme.textTheme.labelSmall?.copyWith(
-        letterSpacing: 2,
-        color: theme.colorScheme.onSurfaceVariant,
-      ),
-    );
+    return Text(text, style: AppTheme.sectionLabelStyle(context));
   }
 }
 
