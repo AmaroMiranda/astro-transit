@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'design_system/app_theme.dart';
 import 'location/location_service.dart';
 import 'network/api_client.dart';
+import 'notifications/notification_service.dart';
 import '../features/predictions/data/prediction_repository.dart';
 import '../shared/models/observer_location.dart';
 
@@ -116,9 +117,22 @@ final searchRadiusKmProvider = StateProvider<double>((ref) => 80.0);
 /// Which celestial bodies the user wants to track (RF-002).
 final selectedTargetsProvider = StateProvider<Set<String>>((ref) => {'sun', 'moon'});
 
+final notificationServiceProvider = Provider<NotificationService>((ref) {
+  return NotificationService();
+});
+
+/// Opt-in transit alerts (satellite passes + live candidates). Off by default:
+/// the user enables it in Configurações, which triggers the permission prompt.
+final alertsEnabledProvider = StateProvider<bool>((ref) => false);
+
+/// How many minutes before a scheduled pass the alert should fire.
+final alertLeadMinutesProvider = StateProvider<int>((ref) => 10);
+
 const _kThemeModeKey = 'astrotransit.theme_mode';
 const _kSearchRadiusKey = 'astrotransit.search_radius_km';
 const _kSelectedTargetsKey = 'astrotransit.selected_targets';
+const _kAlertsEnabledKey = 'astrotransit.alerts_enabled';
+const _kAlertLeadKey = 'astrotransit.alert_lead_minutes';
 
 /// Persists theme, search radius and selected targets across app restarts —
 /// otherwise every preference on the settings screen silently resets each
@@ -144,6 +158,14 @@ Future<void> bootstrapUserPreferences(ProviderContainer container) async {
   if (storedTargets != null) {
     container.read(selectedTargetsProvider.notifier).state = storedTargets.toSet();
   }
+  final storedAlerts = prefs.getBool(_kAlertsEnabledKey);
+  if (storedAlerts != null) {
+    container.read(alertsEnabledProvider.notifier).state = storedAlerts;
+  }
+  final storedLead = prefs.getInt(_kAlertLeadKey);
+  if (storedLead != null) {
+    container.read(alertLeadMinutesProvider.notifier).state = storedLead;
+  }
 
   container.listen(themeModeProvider, (previous, next) {
     prefs.setString(_kThemeModeKey, next.name);
@@ -153,5 +175,11 @@ Future<void> bootstrapUserPreferences(ProviderContainer container) async {
   });
   container.listen(selectedTargetsProvider, (previous, next) {
     prefs.setStringList(_kSelectedTargetsKey, next.toList());
+  });
+  container.listen(alertsEnabledProvider, (previous, next) {
+    prefs.setBool(_kAlertsEnabledKey, next);
+  });
+  container.listen(alertLeadMinutesProvider, (previous, next) {
+    prefs.setInt(_kAlertLeadKey, next);
   });
 }

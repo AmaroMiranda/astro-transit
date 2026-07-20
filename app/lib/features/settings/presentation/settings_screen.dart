@@ -10,17 +10,85 @@ import '../../../core/providers.dart';
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
+  Future<void> _toggleAlerts(
+      BuildContext context, WidgetRef ref, bool enable) async {
+    if (!enable) {
+      ref.read(alertsEnabledProvider.notifier).state = false;
+      await ref.read(notificationServiceProvider).cancelPassAlerts();
+      return;
+    }
+    // Permission is requested here, in-app, at the moment of intent.
+    final granted =
+        await ref.read(notificationServiceProvider).requestPermission();
+    if (granted) {
+      ref.read(alertsEnabledProvider.notifier).state = true;
+    } else if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Permissão de notificações negada — os alertas '
+              'continuam desligados.'),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider);
     final radiusKm = ref.watch(searchRadiusKmProvider);
     final targets = ref.watch(selectedTargetsProvider);
+    final alertsEnabled = ref.watch(alertsEnabledProvider);
+    final leadMinutes = ref.watch(alertLeadMinutesProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Configurações')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          _SettingsCard(
+            title: 'Alertas de trânsitos',
+            subtitle: 'Avisos antes das passagens de ISS/Tiangong e quando um '
+                'avião tiver trânsito provável com o app aberto.',
+            child: Column(
+              children: [
+                SwitchListTile(
+                  title: const Text('Notificações'),
+                  secondary: Icon(
+                    alertsEnabled
+                        ? Icons.notifications_active_outlined
+                        : Icons.notifications_off_outlined,
+                    color: alertsEnabled
+                        ? AstroColors.success
+                        : AstroColors.telemetry,
+                  ),
+                  contentPadding: EdgeInsets.zero,
+                  value: alertsEnabled,
+                  onChanged: (v) => _toggleAlerts(context, ref, v),
+                ),
+                if (alertsEnabled) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Expanded(child: Text('Antecedência do aviso')),
+                      SegmentedButton<int>(
+                        segments: const [
+                          ButtonSegment(value: 5, label: Text('5 min')),
+                          ButtonSegment(value: 10, label: Text('10 min')),
+                          ButtonSegment(value: 30, label: Text('30 min')),
+                        ],
+                        selected: {leadMinutes},
+                        showSelectedIcon: false,
+                        onSelectionChanged: (s) => ref
+                            .read(alertLeadMinutesProvider.notifier)
+                            .state = s.first,
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
           _SettingsCard(
             title: 'Tema',
             subtitle: 'O modo vermelho preserva a adaptação noturna dos olhos.',

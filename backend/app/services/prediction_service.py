@@ -61,6 +61,34 @@ _CORRIDOR_MARGIN_DEG = 0.05
 _MAX_DATA_AGE_S = 60.0
 
 
+def satellite_corridor(observer, st) -> Optional[CorridorEstimate]:
+    """Ground corridor for a :class:`SatelliteTransit` via the exact ECEF
+    ray-ellipsoid shadow point (P0.3). Shared by live prediction and the
+    multi-day passes planner."""
+    body_dir = az_alt_to_ecef_direction(
+        st.candidate.body_azimuth_deg, st.candidate.body_altitude_deg, observer
+    )
+    shadow = satellite_shadow_point(st.sat_ecef_m, body_dir)
+    if shadow is None:
+        return None
+    center_lat, center_lon = shadow
+    tolerance_rad = math.radians(
+        st.candidate.body_radius_deg
+        + st.candidate.aircraft_radius_deg
+        + _CORRIDOR_MARGIN_DEG
+    )
+    distance_m, bearing_deg = _great_circle_distance_bearing(
+        observer.latitude_deg, observer.longitude_deg, center_lat, center_lon
+    )
+    return CorridorEstimate(
+        center_lat_deg=center_lat,
+        center_lon_deg=center_lon,
+        half_width_m=tolerance_rad * st.slant_range_m,
+        distance_from_observer_m=distance_m,
+        bearing_from_observer_deg=bearing_deg,
+    )
+
+
 @dataclass(frozen=True)
 class TransitPrediction:
     candidate: TransitCandidate
@@ -167,33 +195,7 @@ class PredictionService:
                 # Satellite ground point: exact ray-ellipsoid intersection in
                 # ECEF — the aircraft corridor's flat-earth construction is
                 # invalid at orbital altitude (P0.3).
-                corridor = None
-                body_dir = az_alt_to_ecef_direction(
-                    st.candidate.body_azimuth_deg,
-                    st.candidate.body_altitude_deg,
-                    observer,
-                )
-                shadow = satellite_shadow_point(st.sat_ecef_m, body_dir)
-                if shadow is not None:
-                    center_lat, center_lon = shadow
-                    tolerance_rad = math.radians(
-                        st.candidate.body_radius_deg
-                        + st.candidate.aircraft_radius_deg
-                        + _CORRIDOR_MARGIN_DEG
-                    )
-                    distance_m, bearing_deg = _great_circle_distance_bearing(
-                        observer.latitude_deg,
-                        observer.longitude_deg,
-                        center_lat,
-                        center_lon,
-                    )
-                    corridor = CorridorEstimate(
-                        center_lat_deg=center_lat,
-                        center_lon_deg=center_lon,
-                        half_width_m=tolerance_rad * st.slant_range_m,
-                        distance_from_observer_m=distance_m,
-                        bearing_from_observer_deg=bearing_deg,
-                    )
+                corridor = satellite_corridor(observer, st)
 
                 results.append(
                     TransitPrediction(

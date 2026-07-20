@@ -7,6 +7,7 @@ import '../features/history/presentation/history_screen.dart';
 import '../features/live_tracking/presentation/live_tracking_screen.dart';
 import '../features/map/presentation/map_screen.dart';
 import '../features/onboarding/presentation/onboarding_screen.dart';
+import '../features/passes/presentation/passes_screen.dart';
 import '../features/radar/presentation/radar_screen.dart';
 import '../features/settings/presentation/settings_screen.dart';
 import 'onboarding_state.dart';
@@ -33,6 +34,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: '/', builder: (context, state) => const DashboardScreen()),
       GoRoute(path: '/radar', builder: (context, state) => const RadarScreen()),
+      GoRoute(path: '/passes', builder: (context, state) => const PassesScreen()),
       GoRoute(
         path: '/live-tracking',
         builder: (context, state) => const LiveTrackingScreen(),

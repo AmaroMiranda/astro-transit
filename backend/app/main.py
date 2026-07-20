@@ -23,6 +23,7 @@ from app.providers.airplaneslive import AirplanesLiveProvider
 from app.providers.base import AircraftDataProvider
 from app.providers.opensky import OpenSkyProvider
 from app.providers.registry import ProviderRegistry
+from app.services.passes_service import PassesService
 from app.services.prediction_service import PredictionService
 
 _PROVIDER_FACTORIES = {
@@ -69,6 +70,11 @@ async def lifespan(app: FastAPI):
 
     app.state.prediction_service = PredictionService(
         app.state.ephemeris, app.state.registry, satellite_catalog=app.state.satellites
+    )
+    app.state.passes_service = (
+        PassesService(app.state.ephemeris, app.state.satellites)
+        if app.state.satellites is not None
+        else None
     )
 
     yield

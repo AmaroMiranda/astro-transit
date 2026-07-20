@@ -17,6 +17,7 @@ per-request budget.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -59,6 +60,9 @@ class SatelliteTransit:
     slant_range_m: float             # observer-to-satellite distance at transit
     tle_age_hours: float
     sat_ecef_m: tuple[float, float, float] = (0.0, 0.0, 0.0)  # ECEF at transit
+    # How long the satellite silhouette overlaps the disc (chord / relative
+    # angular rate). 0 when the closest approach never touches the disc.
+    transit_duration_s: float = 0.0
 
 
 def _separation_deg_array(
@@ -95,12 +99,18 @@ def find_satellite_transit(
     observer: ObserverLocation,
     when: datetime,
     horizon_s: float = 120.0,
+    approach_gate_deg: float = _APPROACH_GATE_DEG,
+    keep_no_overlap: bool = False,
 ) -> Optional[SatelliteTransit]:
     """Closest approach of ``loaded`` to ``body`` within ``horizon_s`` of ``when``.
 
     Returns ``None`` when the satellite never rises above the horizon while the body
     is up, or when the closest approach is nowhere near the disc. The returned
     candidate may still be classified ``APPROACH`` (the caller filters non-transits).
+
+    ``keep_no_overlap=True`` also returns near misses (class ``NONE`` within the
+    gate) — used by the multi-day planner, where a miss *here* is a transit a few
+    km away along the ground track.
     """
     ts = ephemeris.timescale
     site = wgs84.latlon(
@@ -124,7 +134,7 @@ def find_satellite_transit(
         return None
 
     i = int(np.argmin(sep))
-    if not np.isfinite(sep[i]) or sep[i] > _APPROACH_GATE_DEG:
+    if not np.isfinite(sep[i]) or sep[i] > approach_gate_deg:
         return None
 
     # Refine around the coarse minimum on a fine grid (one vectorized evaluation).
@@ -159,8 +169,27 @@ def find_satellite_transit(
     transit_class = classify_transit(
         min_sep, body_pos.angular_radius_deg, sat_radius_deg, _MARGIN_DEG
     )
-    if transit_class in (TransitClass.NONE,):
+    if transit_class is TransitClass.NONE and not keep_no_overlap:
         return None
+
+    # Transit duration: disc chord at min_sep divided by the satellite's angular
+    # rate relative to the body (body drift is ~200x slower — negligible over
+    # the sub-second crossing). Rate measured on the fine grid around j.
+    duration_s = 0.0
+    j_lo, j_hi = max(0, j - 1), min(len(fine_offsets) - 1, j + 1)
+    dt = float(fine_offsets[j_hi] - fine_offsets[j_lo])
+    if dt > 0:
+        rate_deg_s = float(
+            _separation_deg_array(
+                np.array([fsat_alt.degrees[j_lo]]),
+                np.array([fsat_az.degrees[j_lo]]),
+                np.array([fsat_alt.degrees[j_hi]]),
+                np.array([fsat_az.degrees[j_hi]]),
+            )[0]
+        ) / dt
+        chord_radius = body_pos.angular_radius_deg + sat_radius_deg
+        if rate_deg_s > 0 and min_sep < chord_radius:
+            duration_s = 2.0 * math.sqrt(chord_radius**2 - min_sep**2) / rate_deg_s
 
     # Sub-satellite ground point + exact ECEF at transit (for the ground track).
     geocentric = loaded.satellite.at(_times_from_offsets(ts, when, np.array([refined_t])))
@@ -195,4 +224,5 @@ def find_satellite_transit(
         slant_range_m=slant_range_m,
         tle_age_hours=_tle_age_hours(loaded.satellite, when),
         sat_ecef_m=sat_ecef,
+        transit_duration_s=duration_s,
     )

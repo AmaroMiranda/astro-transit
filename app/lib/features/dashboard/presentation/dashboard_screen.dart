@@ -31,6 +31,26 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   bool _locating = false;
   LocationRefreshError? _locationError;
 
+  /// Last live candidate already notified (icao+body), to avoid re-alerting
+  /// on every refresh of the same event.
+  String? _notifiedCandidateKey;
+
+  void _maybeNotifyLiveCandidate(TransitPrediction? prediction) {
+    if (prediction == null) return;
+    if (!ref.read(alertsEnabledProvider)) return;
+    final c = prediction.candidate;
+    final key = '${c.icao24}-${c.body.name}';
+    if (key == _notifiedCandidateKey) return;
+    _notifiedCandidateKey = key;
+    final bodyLabel = c.body == CelestialBody.moon ? 'a Lua' : 'o Sol';
+    ref.read(notificationServiceProvider).showLiveCandidate(
+          title: 'Trânsito provável: ${prediction.displayLabel}',
+          body: 'Cruza $bodyLabel em ${c.timeToTransitS.round()} s '
+              '(${transitClassLabel(c.transitClass).toLowerCase()}). '
+              'Abra o acompanhamento!',
+        );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -75,6 +95,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final observer = ref.watch(observerLocationProvider);
     final predictionAsync = ref.watch(predictionProvider);
     final busy = _locating || predictionAsync.isLoading;
+
+    // Immediate opt-in alert when a live candidate shows up (P0.7: alerts
+    // promised by onboarding now actually exist).
+    ref.listen(nextPredictionProvider, (previous, next) {
+      _maybeNotifyLiveCandidate(next);
+    });
 
     return Scaffold(
       body: SafeArea(
@@ -889,6 +915,13 @@ class _ExploreGrid extends StatelessWidget {
       label: 'Câmera',
       subtitle: 'Overlay e gravação',
       route: '/camera',
+    ),
+    _ExploreTile(
+      icon: Icons.satellite_alt,
+      color: AstroColors.satellite,
+      label: 'Passagens',
+      subtitle: 'ISS e Tiangong · 48h',
+      route: '/passes',
     ),
     _ExploreTile(
       icon: Icons.history,

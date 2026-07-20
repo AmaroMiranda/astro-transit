@@ -6,6 +6,7 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../../shared/models/observer_location.dart';
@@ -27,9 +28,33 @@ class LocationTimedOut implements Exception {
 }
 
 class LocationService {
+  static const _settingsChannel =
+      MethodChannel('astrotransit/location_settings');
+
+  /// Shows the platform's own "turn on device location" dialog inside the app
+  /// (Google Play Services SettingsClient, wired in MainActivity.kt) instead
+  /// of sending the user to the system settings screen. Returns true when the
+  /// service ended up enabled.
+  Future<bool> _tryEnableLocationService() async {
+    try {
+      final enabled =
+          await _settingsChannel.invokeMethod<bool>('requestEnable');
+      return enabled ?? false;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      // iOS / tests: no native handler — caller falls back to settings flow.
+      return false;
+    }
+  }
+
   Future<bool> ensurePermission() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
-      throw const LocationServiceDisabled();
+      // In-app enable dialog first; only fail toward "open settings" when the
+      // user declined it or the dialog isn't available on this device.
+      if (!await _tryEnableLocationService()) {
+        throw const LocationServiceDisabled();
+      }
     }
     var permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {

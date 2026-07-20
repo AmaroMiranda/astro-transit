@@ -177,6 +177,50 @@ class PredictionOut(BaseModel):
         )
 
 
+class SatellitePassOut(BaseModel):
+    """One upcoming (multi-day) satellite transit — deterministic planning."""
+
+    satellite_id: str
+    satellite_label: str
+    body: CelestialBody
+    transit_at_utc: datetime
+    transit_class: TransitClass
+    duration_s: float
+    elevation_deg: float
+    azimuth_deg: float
+    slant_range_m: float
+    min_separation_deg: float
+    body_radius_deg: float
+    tle_age_hours: float
+    corridor: Optional[CorridorOut] = None
+
+    @classmethod
+    def of(cls, p) -> "SatellitePassOut":
+        c = p.transit.candidate
+        return cls(
+            satellite_id=p.satellite_id,
+            satellite_label=p.satellite_label,
+            body=c.body,
+            transit_at_utc=p.transit_at_utc,
+            transit_class=c.transit_class,
+            duration_s=round(p.transit.transit_duration_s, 2),
+            elevation_deg=round(c.aircraft_altitude_deg, 2),
+            azimuth_deg=round(c.aircraft_azimuth_deg, 2),
+            slant_range_m=round(p.transit.slant_range_m, 0),
+            min_separation_deg=round(c.min_separation_deg, 5),
+            body_radius_deg=round(c.body_radius_deg, 5),
+            tle_age_hours=round(p.transit.tle_age_hours, 1),
+            corridor=CorridorOut.of(p.corridor) if p.corridor else None,
+        )
+
+
+class SatellitePassesOut(BaseModel):
+    generated_at_utc: datetime
+    hours: float
+    count: int
+    passes: list[SatellitePassOut]
+
+
 class AircraftOut(BaseModel):
     icao24: str
     callsign: Optional[str]
