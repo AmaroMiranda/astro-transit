@@ -28,3 +28,4 @@ app/**/GeneratedPluginRegistrant.*
 .DS_Store
 Thumbs.db
 .vscode/
+app/android/build/
