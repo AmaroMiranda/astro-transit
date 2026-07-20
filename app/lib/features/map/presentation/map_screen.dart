@@ -221,7 +221,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                             headingDeg: a.trackDeg,
                             color: AstroColors.aircraftCommon,
                             size: 26,
-                            glowColor: Colors.black.withValues(alpha: 0.55),
+                            outlineColor: Colors.black.withValues(alpha: 0.45),
                           ),
                         ),
                       ),
@@ -552,7 +552,9 @@ String _timeToTransitLabel(double seconds) {
 }
 
 /// Highlighted marker for an aircraft with a probable transit: a glowing ring
-/// around the shared plane silhouette, in the candidate colour.
+/// around the shared plane silhouette, in the candidate colour. The "glow" is
+/// a radial gradient (no blur/saveLayer) and the whole marker is a
+/// RepaintBoundary — map gestures only translate the cached raster.
 class _CandidateAircraftMarker extends StatelessWidget {
   final double trackDeg;
 
@@ -560,51 +562,54 @@ class _CandidateAircraftMarker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: AstroColors.aircraftCandidate.withValues(alpha: 0.14),
-        border: Border.all(color: AstroColors.aircraftCandidate, width: 1.6),
-        boxShadow: [
-          BoxShadow(
-            color: AstroColors.aircraftCandidate.withValues(alpha: 0.45),
-            blurRadius: 10,
-            spreadRadius: 1,
+    return RepaintBoundary(
+      child: Container(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(
+            colors: [
+              AstroColors.aircraftCandidate.withValues(alpha: 0.30),
+              AstroColors.aircraftCandidate.withValues(alpha: 0.0),
+            ],
+            stops: const [0.55, 1.0],
           ),
-        ],
-      ),
-      child: Center(
-        child: PlaneIcon(
-          headingDeg: trackDeg,
-          color: AstroColors.aircraftCandidate,
-          size: 26,
+          border: Border.all(color: AstroColors.aircraftCandidate, width: 1.6),
+        ),
+        child: Center(
+          child: PlaneIcon(
+            headingDeg: trackDeg,
+            color: AstroColors.aircraftCandidate,
+            size: 26,
+          ),
         ),
       ),
     );
   }
 }
 
-/// Satellite transit ground point: purple glow chip.
+/// Satellite transit ground point: purple glow chip (gradient, not blur).
 class _SatelliteMarker extends StatelessWidget {
   const _SatelliteMarker();
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: AstroColors.satellite.withValues(alpha: 0.14),
-        border: Border.all(color: AstroColors.satellite, width: 1.6),
-        boxShadow: [
-          BoxShadow(
-            color: AstroColors.satellite.withValues(alpha: 0.45),
-            blurRadius: 10,
-            spreadRadius: 1,
+    return RepaintBoundary(
+      child: Container(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(
+            colors: [
+              AstroColors.satellite.withValues(alpha: 0.30),
+              AstroColors.satellite.withValues(alpha: 0.0),
+            ],
+            stops: const [0.55, 1.0],
           ),
-        ],
-      ),
-      child: const Center(
-        child: Icon(Icons.satellite_alt, color: AstroColors.satellite, size: 22),
+          border: Border.all(color: AstroColors.satellite, width: 1.6),
+        ),
+        child: const Center(
+          child:
+              Icon(Icons.satellite_alt, color: AstroColors.satellite, size: 22),
+        ),
       ),
     );
   }

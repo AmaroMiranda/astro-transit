@@ -38,13 +38,19 @@ Path buildPlanePath() {
 final Path _planePath = buildPlanePath();
 
 /// Paints the shared silhouette rotated to ``headingDeg`` (0 = north/up,
-/// clockwise) and scaled to fit ``size``. Optionally adds a soft glow.
+/// clockwise) and scaled to fit ``size``.
+///
+/// ``outlineColor`` draws a cheap stroked contour under the fill — the way to
+/// separate the plane from the basemap. ``glowColor`` adds a blurred halo;
+/// blurs force a GPU saveLayer each, so reserve it for the FEW highlighted
+/// markers (dozens of blurred common planes froze the map on busy skies).
 void paintPlane(
   Canvas canvas,
   Offset center, {
   required double headingDeg,
   required Color color,
   required double size,
+  Color? outlineColor,
   Color? glowColor,
 }) {
   canvas.save();
@@ -60,30 +66,44 @@ void paintPlane(
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
     );
   }
+  if (outlineColor != null) {
+    canvas.drawPath(
+      _planePath,
+      Paint()
+        ..color = outlineColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.4
+        ..strokeJoin = StrokeJoin.round,
+    );
+  }
   canvas.drawPath(_planePath, Paint()..color = color);
   canvas.restore();
 }
 
-/// Widget wrapper for map markers.
+/// Widget wrapper for map markers. Wrapped in a [RepaintBoundary] so each
+/// marker rasterizes once and is only *translated* during pan/zoom — with
+/// dozens of planes on screen this is the difference between fluid and frozen.
 class PlaneIcon extends StatelessWidget {
   final double headingDeg;
   final Color color;
   final double size;
-  final Color? glowColor;
+  final Color? outlineColor;
 
   const PlaneIcon({
     super.key,
     required this.headingDeg,
     required this.color,
     required this.size,
-    this.glowColor,
+    this.outlineColor,
   });
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(
-      size: Size.square(size),
-      painter: _PlaneIconPainter(headingDeg, color, glowColor),
+    return RepaintBoundary(
+      child: CustomPaint(
+        size: Size.square(size),
+        painter: _PlaneIconPainter(headingDeg, color, outlineColor),
+      ),
     );
   }
 }
@@ -91,9 +111,9 @@ class PlaneIcon extends StatelessWidget {
 class _PlaneIconPainter extends CustomPainter {
   final double headingDeg;
   final Color color;
-  final Color? glowColor;
+  final Color? outlineColor;
 
-  _PlaneIconPainter(this.headingDeg, this.color, this.glowColor);
+  _PlaneIconPainter(this.headingDeg, this.color, this.outlineColor);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -103,7 +123,7 @@ class _PlaneIconPainter extends CustomPainter {
       headingDeg: headingDeg,
       color: color,
       size: size.shortestSide,
-      glowColor: glowColor,
+      outlineColor: outlineColor,
     );
   }
 
@@ -111,5 +131,5 @@ class _PlaneIconPainter extends CustomPainter {
   bool shouldRepaint(covariant _PlaneIconPainter old) =>
       old.headingDeg != headingDeg ||
       old.color != color ||
-      old.glowColor != glowColor;
+      old.outlineColor != outlineColor;
 }

@@ -105,4 +105,18 @@ app.include_router(api_router)
 
 @app.get("/health", tags=["meta"])
 async def health() -> dict:
-    return {"status": "ok"}
+    """Liveness + a real dependency signal: whether the satellite catalogue has
+    TLEs loaded (Celestrak blocks some cloud IPs; the fallback source should
+    keep this non-empty — an empty list here means satellite features are
+    silently degraded)."""
+    satellites: list[dict] = []
+    if app.state.satellites is not None:
+        for s in await app.state.satellites.get_satellites():
+            satellites.append(
+                {
+                    "norad_id": s.norad_id,
+                    "label": s.label,
+                    "tle_epoch_utc": s.satellite.epoch.utc_iso(),
+                }
+            )
+    return {"status": "ok", "satellites": satellites}

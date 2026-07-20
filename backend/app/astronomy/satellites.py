@@ -103,6 +103,23 @@ class SatelliteCatalog:
         return self._loaded
 
     async def _fetch_one(self, norad_id: int) -> Optional[LoadedSatellite]:
+        """Primary (Celestrak) with a JSON-API fallback.
+
+        Celestrak intermittently blocks cloud-provider IP ranges — exactly where
+        the backend is hosted — which silently emptied the catalogue in
+        production. The fallback keeps satellite features alive from a second,
+        independent source.
+        """
+        sat = None
+        try:
+            sat = await self._fetch_celestrak(norad_id)
+        except (httpx.HTTPError, ValueError):
+            sat = None
+        if sat is None:
+            sat = await self._fetch_fallback(norad_id)
+        return sat
+
+    async def _fetch_celestrak(self, norad_id: int) -> Optional[LoadedSatellite]:
         resp = await self._client.get(
             self._source_url, params={"CATNR": norad_id, "FORMAT": "TLE"}
         )
@@ -115,6 +132,28 @@ class SatelliteCatalog:
         if len(lines) < 3:
             return None
         name, line1, line2 = lines[0].strip(), lines[1], lines[2]
+        return self._build(norad_id, name, line1, line2)
+
+    async def _fetch_fallback(self, norad_id: int) -> Optional[LoadedSatellite]:
+        try:
+            resp = await self._client.get(
+                f"https://tle.ivanstanojevic.me/api/tle/{norad_id}"
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            line1 = data.get("line1")
+            line2 = data.get("line2")
+            if not line1 or not line2:
+                return None
+            return self._build(
+                norad_id, str(data.get("name", norad_id)), line1, line2
+            )
+        except (httpx.HTTPError, ValueError):
+            return None
+
+    def _build(
+        self, norad_id: int, name: str, line1: str, line2: str
+    ) -> LoadedSatellite:
         satellite = EarthSatellite(line1, line2, name, self._ts)
         return LoadedSatellite(
             norad_id=norad_id,

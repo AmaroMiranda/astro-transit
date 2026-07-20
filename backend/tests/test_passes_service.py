@@ -170,3 +170,31 @@ async def test_planner_real_ephemeris_24h_smoke():
     for p in passes:
         assert p.transit.candidate.is_transit
         assert p.transit_at_utc >= _BASE
+
+
+@pytest.mark.asyncio
+async def test_tle_fallback_source_when_celestrak_blocked():
+    """Celestrak 403 (cloud-IP block) must not empty the catalogue: the
+    fallback JSON API supplies the TLE."""
+    import httpx
+    from app.astronomy.satellites import SatelliteCatalog
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "celestrak" in request.url.host:
+            return httpx.Response(403, text="Forbidden")
+        assert "ivanstanojevic" in request.url.host
+        return httpx.Response(200, json={
+            "name": "ISS (ZARYA)",
+            "line1": _L1,
+            "line2": _L2,
+        })
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    catalog = SatelliteCatalog(
+        timescale=_EPHEMERIS.timescale, norad_ids=[25544], client=client
+    )
+    sats = await catalog.get_satellites()
+    assert len(sats) == 1
+    assert sats[0].norad_id == 25544
+    assert sats[0].label.startswith("ISS")
+    await client.aclose()
