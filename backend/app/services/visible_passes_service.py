@@ -25,6 +25,8 @@ fina o suficiente para a precisão de segundos que a UI mostra.
 
 from __future__ import annotations
 
+import asyncio
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -59,6 +61,8 @@ _SUN_ALT_MAX_DEG = 6.0
 # Gate angular para decidir se a passagem também é um trânsito (mesmo do
 # planejador: ~4° = corredor a ~40 km, "dirija até a linha").
 _TRANSIT_GATE_DEG = 4.0
+# Cache por local (as passagens de 10 dias não mudam de minuto a minuto).
+_CACHE_TTL_S = 300.0
 
 
 @dataclass(frozen=True)
@@ -100,6 +104,9 @@ class VisiblePassesService:
     def __init__(self, ephemeris: EphemerisService, catalog: SatelliteCatalog):
         self._ephemeris = ephemeris
         self._catalog = catalog
+        # Cache TTL por local: o cálculo de 10 dias é pesado no free tier, e as
+        # passagens não mudam de minuto a minuto. Chave = local arredondado.
+        self._cache: dict[tuple, tuple[float, list[VisiblePass]]] = {}
 
     async def upcoming(
         self,
@@ -114,20 +121,45 @@ class VisiblePassesService:
         if not satellites:
             return []
 
-        # Varre em PEDAÇOS de 1 dia em vez de tudo de uma vez. O escaneamento
-        # vetorizado guarda arrays proporcionais ao nº de pontos (~2880/dia a
-        # 30 s); 10 dias × 2 satélites de uma vez estourava os 512 MB do free
-        # tier e o processo era MORTO (derrubava o backend inteiro). Por dia, o
-        # pico de memória fica em ~1/10. Uma pequena sobreposição garante que
-        # uma passagem na virada da meia-noite não seja cortada; o dedupe por
-        # (satélite, minuto da culminação) remove a contagem dupla.
+        # Cache de 5 min por célula ~11 km (2 casas) + janela. Poupa recomputar
+        # os 10 dias a cada refresh do app e para observadores próximos.
+        key = (round(observer.latitude_deg, 1), round(observer.longitude_deg, 1),
+               round(hours))
+        now = time.monotonic()
+        hit = self._cache.get(key)
+        if hit is not None and (now - hit[0]) <= _CACHE_TTL_S:
+            return hit[1]
+
+        # O cálculo é CPU-bound (numpy/Skyfield) e SÍNCRONO. Se rodasse no event
+        # loop, travaria o /health por dezenas de segundos e o Render mataria o
+        # serviço (foi o loop de reinício observado). Offload para um thread
+        # mantém o event loop livre para o health check.
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None, self._compute, observer, satellites, start, hours
+        )
+        self._cache[key] = (now, result)
+        # Poda oportunista para o cache não crescer sem limite.
+        for k in [k for k, v in self._cache.items() if now - v[0] > _CACHE_TTL_S]:
+            self._cache.pop(k, None)
+        return result
+
+    def _compute(
+        self, observer: ObserverLocation, satellites, start: datetime, hours: float
+    ) -> list[VisiblePass]:
+        """Núcleo síncrono (roda num thread). Varre em PEDAÇOS de 1 dia: o
+        escaneamento vetorizado guarda arrays proporcionais ao nº de pontos;
+        10 dias × 2 satélites de uma vez estourava os 512 MB do free tier e o
+        processo era MORTO. Por dia, o pico cai a ~1/10. A sobreposição evita
+        cortar passagem na virada; o dedupe por (satélite, minuto) tira a
+        contagem dupla."""
         site = wgs84.latlon(
             observer.latitude_deg,
             observer.longitude_deg,
             elevation_m=observer.altitude_m,
         )
         chunk_h = 24.0
-        overlap_h = 0.5  # meia hora cobre a passagem mais longa na fronteira
+        overlap_h = 0.5
         all_passes: list[VisiblePass] = []
         seen: set[tuple[str, int]] = set()
         t = 0.0
@@ -135,10 +167,10 @@ class VisiblePassesService:
             span = min(chunk_h + overlap_h, hours - t + overlap_h)
             chunk_start = start + timedelta(hours=t)
             for p in self._scan(observer, site, satellites, chunk_start, span):
-                key = (p.satellite_id, int(p.culmination_utc.timestamp() // 60))
-                if key in seen:
+                k = (p.satellite_id, int(p.culmination_utc.timestamp() // 60))
+                if k in seen:
                     continue
-                seen.add(key)
+                seen.add(k)
                 all_passes.append(p)
             t += chunk_h
 
@@ -175,10 +207,22 @@ class VisiblePassesService:
             alt_deg = sat_alt.degrees
             az_deg = sat_az.degrees
             range_km = sat_range.km
-            # Iluminada pelo Sol? (Skyfield usa o ephemeris para a sombra.)
-            sunlit = loaded.satellite.at(times).is_sunlit(self._ephemeris.eph)
 
-            visible = (alt_deg > 0.0) & sunlit & observer_dark
+            # is_sunlit é a chamada CARA (calcula a sombra da Terra). Só
+            # importa quando o satélite já está acima do horizonte E o céu
+            # escuro — ~5% dos pontos. Restringir a esses pontos corta o custo
+            # ~20x (era o que fazia o free tier levar 45 s e reiniciar).
+            cand = (alt_deg > 0.0) & observer_dark
+            sunlit = np.zeros(alt_deg.shape, dtype=bool)
+            if cand.any():
+                idx = np.flatnonzero(cand)
+                sub_times = ts.from_datetimes(
+                    [start + timedelta(seconds=float(offsets[i])) for i in idx]
+                )
+                sub = loaded.satellite.at(sub_times).is_sunlit(self._ephemeris.eph)
+                sunlit[idx] = np.asarray(sub)
+
+            visible = cand & sunlit
             for i0, i1 in _segments(visible):
                 seg_alt = alt_deg[i0 : i1 + 1]
                 max_i_local = int(np.argmax(seg_alt))
