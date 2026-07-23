@@ -68,11 +68,13 @@ async def satellite_visible_passes(
     latitude: float = Query(..., ge=-90, le=90),
     longitude: float = Query(..., ge=-180, le=180),
     altitude_m: float = Query(0.0, ge=-500, le=9000),
-    hours: float = Query(48.0, ge=1, le=72),
+    hours: float = Query(240.0, ge=1, le=240),
 ) -> VisiblePassesOut:
-    """Passagens VISÍVEIS da ISS/Tiangong (estação iluminada + observador no
-    escuro), para o usuário registrá-las. As que também são trânsito do Sol/Lua
-    vêm marcadas com is_transit."""
+    """Passagens VISÍVEIS da ISS/Tiangong (estação iluminada + céu do observador
+    escuro, a partir de ~30 min antes do pôr do sol), para o usuário registrá-las.
+    Janela padrão de 10 dias (como os preditores estabelecidos) — a ISS tem
+    temporadas de visibilidade e uma janela curta esconde passagens de dias à
+    frente. As que também são trânsito do Sol/Lua vêm marcadas com is_transit."""
     service = get_visible_passes_service(request)
     now = datetime.now(timezone.utc)
     if service is None:

@@ -159,11 +159,12 @@ class _VisiblePassesTab extends ConsumerWidget {
                     size: 48, color: AstroColors.telemetry),
                 SizedBox(height: 16),
                 Text(
-                  'Nenhuma passagem visível da ISS ou da Tiangong nos próximos '
-                  '2 dias.\n\nA estação só é visível quando está iluminada pelo '
-                  'Sol e o céu já está escuro (perto do amanhecer ou do '
-                  'anoitecer) — essas janelas vão e voltam a cada poucas '
-                  'semanas. Volte mais tarde ou tente outro dia.',
+                  'Nenhuma passagem visível da ISS ou da Tiangong sobre o seu '
+                  'local nos próximos 10 dias.\n\nA estação só aparece quando '
+                  'está iluminada pelo Sol e o seu céu já escureceu (do fim da '
+                  'tarde à noite, ou de madrugada) — e essas temporadas vão e '
+                  'voltam a cada 1-2 semanas para cada lugar. Volte em alguns '
+                  'dias ou escolha outro ponto no mapa.',
                   textAlign: TextAlign.center,
                 ),
               ],

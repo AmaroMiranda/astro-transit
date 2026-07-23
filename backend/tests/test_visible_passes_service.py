@@ -22,7 +22,7 @@ from app.domain.models import CelestialBody, ObserverLocation
 from app.services.visible_passes_service import (
     VisiblePassesService,
     _MIN_CULMINATION_DEG,
-    _SUN_DARK_DEG,
+    _SUN_ALT_MAX_DEG,
     _approx_magnitude,
 )
 
@@ -81,14 +81,15 @@ async def test_visible_passes_satisfy_visibility_invariants():
             assert p.culmination_utc >= prev_culm
         prev_culm = p.culmination_utc
 
-        # INVARIANTE-CHAVE 1: no auge, o observador está no escuro.
+        # INVARIANTE-CHAVE 1: no auge, o céu já está escuro o bastante (a partir
+        # de ~30 min antes do pôr do sol, Sol abaixo do limiar).
         t = ts.from_datetime(p.culmination_utc)
         sun_alt, _, _ = _EPHEMERIS.altaz_series(
             CelestialBody.SUN, _OBS, ts.from_datetimes([p.culmination_utc])
         )
-        assert float(sun_alt[0]) < _SUN_DARK_DEG, (
+        assert float(sun_alt[0]) < _SUN_ALT_MAX_DEG, (
             f"passagem listada com Sol a {float(sun_alt[0]):.1f}° "
-            "(observador não estava no escuro)"
+            "(céu ainda em pleno dia)"
         )
         # INVARIANTE-CHAVE 2: no auge, a estação está iluminada pelo Sol.
         assert bool(iss.at(t).is_sunlit(_EPHEMERIS.eph)), (

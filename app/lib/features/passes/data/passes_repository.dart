@@ -15,7 +15,9 @@ class PassesRepository {
   /// trânsito (marcadas com `isTransit`).
   Future<VisiblePassesResponse> visible({
     required ObserverLocation observer,
-    double hours = 48.0,
+    double hours = 240.0, // 10 dias (padrão dos preditores) — a ISS tem
+    // temporadas de visibilidade; janela curta esconde passagens de dias à
+    // frente e a lista fica vazia sem motivo aparente.
   }) async {
     final response = await _client.dio.get(
       '/v1/satellites/visible-passes',

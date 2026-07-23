@@ -8,8 +8,10 @@ Uma passagem é visível quando, ao mesmo tempo:
   1. o satélite está acima do horizonte (culminando acima de um mínimo);
   2. o satélite está ILUMINADO pelo Sol (fora da sombra da Terra) — senão é um
      ponto escuro invisível;
-  3. o OBSERVADOR está no escuro (Sol abaixo de ~-6°, crepúsculo civil ou mais
-     escuro) — de dia o céu ofusca a estação.
+  3. o céu do OBSERVADOR já está escuro o bastante — a partir de ~30 min antes
+     do pôr do sol (Sol abaixo de ~+6°) e noite adentro. Passagens brilhantes
+     são visíveis já no crepúsculo claro, então a janela é generosa; a estação
+     estar iluminada (item 2) é a restrição que não se abre mão.
 
 Para cada passagem reportamos início/culminação/fim, elevação máxima, azimutes
 de subida e descida, e a magnitude aproximada. E marcamos `is_transit` quando a
@@ -37,13 +39,23 @@ from app.prediction.satellite_transit import find_satellite_transit
 from app.services.passes_service import _segments  # reutiliza o detector de segmentos
 
 _COARSE_STEP_S = 30.0
-_MAX_HOURS = 72.0
+# Janela ampla (10 dias) como os preditores estabelecidos (Heavens-Above lista
+# ~10 dias): a ISS tem TEMPORADAS de visibilidade e uma janela curta esconde
+# passagens que estão a poucos dias — inútil para planejar. Diferente do
+# planejador de TRÂNSITOS (limitado a 72 h porque a deriva do TLE move o
+# corredor de poucos km), uma passagem visível é um evento a olho nu numa área
+# ampla: alguns minutos de deriva no horário ao fim de uma semana não atrapalham.
+_MAX_HOURS = 240.0
 # Culminação mínima para valer a pena listar (abaixo disso o horizonte costuma
-# bloquear, igual ao planejador de trânsitos).
+# bloquear).
 _MIN_CULMINATION_DEG = 10.0
-# O observador precisa estar ao menos no crepúsculo civil para a estação
-# destacar do céu. -6° = fim do crepúsculo civil.
-_SUN_DARK_DEG = -6.0
+# Até que altura do Sol ainda vale listar a passagem. O usuário observa que "às
+# vezes o Sol está se pondo e mesmo assim dá para ver a ISS" — então a janela de
+# observação começa ~30 min ANTES do pôr do sol e vai noite adentro. Medido em
+# SP, 30 min antes do pôr do sol o Sol está a ~+5.5° → usamos +6°. A condição
+# física inegociável continua sendo a estação estar ILUMINADA (fora da sombra);
+# não filtramos por brilho/magnitude (o que importa é passar pela localização).
+_SUN_ALT_MAX_DEG = 6.0
 # Gate angular para decidir se a passagem também é um trânsito (mesmo do
 # planejador: ~4° = corredor a ~40 km, "dirija até a linha").
 _TRANSIT_GATE_DEG = 4.0
@@ -113,7 +125,7 @@ class VisiblePassesService:
         sun_alt, _, _ = self._ephemeris.altaz_series(
             CelestialBody.SUN, observer, times
         )
-        observer_dark = sun_alt < _SUN_DARK_DEG
+        observer_dark = sun_alt < _SUN_ALT_MAX_DEG
 
         site = wgs84.latlon(
             observer.latitude_deg,
