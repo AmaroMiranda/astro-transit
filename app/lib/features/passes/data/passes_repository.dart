@@ -1,6 +1,8 @@
 /// Talks to `GET /v1/satellites/passes` — multi-day ISS/Tiangong transit planning.
 library;
 
+import 'package:dio/dio.dart';
+
 import '../../../core/network/api_client.dart';
 import '../../../shared/models/observer_location.dart';
 import '../domain/satellite_pass.dart';
@@ -27,6 +29,11 @@ class PassesRepository {
         'altitude_m': observer.altitudeM,
         'hours': hours,
       },
+      // A 1ª varredura de 10 dias no free tier leva ~1 min (CPU estrangulada);
+      // depois o backend cacheia e responde em ~0,4 s. O backend não trava mais
+      // durante o cálculo (roda em thread), então vale esperar em vez de
+      // desistir aos 30 s do timeout padrão e mostrar erro para o usuário.
+      options: Options(receiveTimeout: const Duration(seconds: 75)),
     );
     return VisiblePassesResponse.fromJson(
       response.data as Map<String, dynamic>,
