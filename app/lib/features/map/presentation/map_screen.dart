@@ -1068,13 +1068,13 @@ class _PredictionDetailSheet extends StatelessWidget {
 /// que o backend fornece (RF: "ao clicar no avião, mostrar mais detalhes
 /// disponíveis") — antes isso era um SnackBar de uma linha que ainda por cima
 /// se empilhava a cada toque.
-class _AircraftDetailSheet extends StatelessWidget {
+class _AircraftDetailSheet extends ConsumerWidget {
   final AircraftState aircraft;
 
   const _AircraftDetailSheet({required this.aircraft});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final a = aircraft;
     final altitudeFt = (a.altitudeM * 3.28084).round();
@@ -1121,6 +1121,7 @@ class _AircraftDetailSheet extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
+            _AircraftPhoto(icao24: a.icao24),
             Wrap(
               spacing: 10,
               runSpacing: 10,
@@ -1188,6 +1189,109 @@ class _AircraftDetailSheet extends StatelessWidget {
       default:
         return 'Aeronave';
     }
+  }
+}
+
+/// Foto da aeronave (Planespotters) por hex ICAO24. A foto é um extra: enquanto
+/// carrega mostra um placeholder discreto; se não houver foto (ou a rede/URL
+/// falhar) não ocupa espaço nenhum. Crédito ao fotógrafo sobreposto, como exigem
+/// os termos da Planespotters.
+class _AircraftPhoto extends ConsumerWidget {
+  final String icao24;
+
+  const _AircraftPhoto({required this.icao24});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final photoAsync = ref.watch(aircraftPhotoProvider(icao24));
+    return photoAsync.when(
+      loading: () => const _PhotoFrame(child: Center(
+        child: SizedBox(
+          width: 22,
+          height: 22,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      )),
+      error: (_, _) => const SizedBox.shrink(),
+      data: (photo) {
+        if (photo == null) return const SizedBox.shrink();
+        return _PhotoFrame(
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.network(
+                photo.imageUrl,
+                fit: BoxFit.cover,
+                loadingBuilder: (context, child, progress) {
+                  if (progress == null) return child;
+                  return const Center(
+                    child: SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  );
+                },
+                // URL morta / host fora do ar: some sem quebrar o modal.
+                errorBuilder: (_, _, _) => const SizedBox.shrink(),
+              ),
+              // Crédito do fotógrafo (obrigatório) sobre um degradê para
+              // legibilidade em qualquer foto.
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(10, 14, 10, 6),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Colors.transparent, Colors.black87],
+                    ),
+                  ),
+                  child: Text(
+                    'Foto: ${photo.photographer} · Planespotters.net',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Moldura padrão da foto: proporção 3:2 (formato típico do acervo), cantos
+/// arredondados e uma margem inferior para separar dos chips de dados.
+class _PhotoFrame extends StatelessWidget {
+  final Widget child;
+
+  const _PhotoFrame({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: AspectRatio(
+          aspectRatio: 3 / 2,
+          child: ColoredBox(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            child: child,
+          ),
+        ),
+      ),
+    );
   }
 }
 

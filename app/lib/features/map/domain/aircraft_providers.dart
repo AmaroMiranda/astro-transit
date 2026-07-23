@@ -9,12 +9,25 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers.dart';
 import '../../../shared/models/aircraft_state.dart';
+import '../data/aircraft_photo_repository.dart';
 import '../data/aircraft_repository.dart';
 
 const _kPollInterval = Duration(seconds: 6);
 
 final aircraftRepositoryProvider = Provider<AircraftRepository>((ref) {
   return AircraftRepository(ref.watch(apiClientProvider));
+});
+
+final aircraftPhotoRepositoryProvider = Provider<AircraftPhotoRepository>((ref) {
+  return AircraftPhotoRepository();
+});
+
+/// Foto da aeronave (Planespotters) por hex ICAO24. Sem `autoDispose`: a foto
+/// de uma matrícula não muda, então mantemos em cache enquanto o app vive —
+/// reabrir a folha do mesmo avião não refaz a consulta.
+final aircraftPhotoProvider =
+    FutureProvider.family<AircraftPhoto?, String>((ref, icao24) async {
+  return ref.watch(aircraftPhotoRepositoryProvider).byIcao24(icao24);
 });
 
 /// Aircraft near the current observer, refreshed every few seconds. Emits an
