@@ -114,6 +114,47 @@ class VisiblePassesService:
         if not satellites:
             return []
 
+        # Varre em PEDAÇOS de 1 dia em vez de tudo de uma vez. O escaneamento
+        # vetorizado guarda arrays proporcionais ao nº de pontos (~2880/dia a
+        # 30 s); 10 dias × 2 satélites de uma vez estourava os 512 MB do free
+        # tier e o processo era MORTO (derrubava o backend inteiro). Por dia, o
+        # pico de memória fica em ~1/10. Uma pequena sobreposição garante que
+        # uma passagem na virada da meia-noite não seja cortada; o dedupe por
+        # (satélite, minuto da culminação) remove a contagem dupla.
+        site = wgs84.latlon(
+            observer.latitude_deg,
+            observer.longitude_deg,
+            elevation_m=observer.altitude_m,
+        )
+        chunk_h = 24.0
+        overlap_h = 0.5  # meia hora cobre a passagem mais longa na fronteira
+        all_passes: list[VisiblePass] = []
+        seen: set[tuple[str, int]] = set()
+        t = 0.0
+        while t < hours:
+            span = min(chunk_h + overlap_h, hours - t + overlap_h)
+            chunk_start = start + timedelta(hours=t)
+            for p in self._scan(observer, site, satellites, chunk_start, span):
+                key = (p.satellite_id, int(p.culmination_utc.timestamp() // 60))
+                if key in seen:
+                    continue
+                seen.add(key)
+                all_passes.append(p)
+            t += chunk_h
+
+        all_passes.sort(key=lambda p: p.culmination_utc)
+        return all_passes
+
+    def _scan(
+        self,
+        observer: ObserverLocation,
+        site,
+        satellites,
+        start: datetime,
+        hours: float,
+    ) -> list[VisiblePass]:
+        """Escaneia UMA janela curta (um pedaço). Mesmo algoritmo de antes, só
+        que sobre poucos pontos — o chamador junta os pedaços."""
         ts = self._ephemeris.timescale
         n = int(hours * 3600.0 / _COARSE_STEP_S) + 1
         offsets = np.arange(n) * _COARSE_STEP_S
@@ -126,12 +167,6 @@ class VisiblePassesService:
             CelestialBody.SUN, observer, times
         )
         observer_dark = sun_alt < _SUN_ALT_MAX_DEG
-
-        site = wgs84.latlon(
-            observer.latitude_deg,
-            observer.longitude_deg,
-            elevation_m=observer.altitude_m,
-        )
 
         out: list[VisiblePass] = []
         for loaded in satellites:
@@ -202,6 +237,4 @@ class VisiblePassesService:
                         transit_body=transit_body,
                     )
                 )
-
-        out.sort(key=lambda p: p.culmination_utc)
         return out
