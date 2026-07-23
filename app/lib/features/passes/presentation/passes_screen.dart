@@ -13,6 +13,7 @@ import '../../../core/utils/compass.dart';
 import '../../../shared/models/celestial_position.dart';
 import '../domain/passes_providers.dart';
 import '../domain/satellite_pass.dart';
+import '../domain/visible_pass.dart';
 
 class PassesScreen extends ConsumerWidget {
   const PassesScreen({super.key});
@@ -20,27 +21,63 @@ class PassesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final observer = ref.watch(observerLocationProvider);
-    final passesAsync = ref.watch(upcomingPassesProvider);
-    final alertsEnabled = ref.watch(alertsEnabledProvider);
-    // Keeps scheduled notifications in sync with the list below.
+    // Mantém as notificações agendadas em sincronia com a lista de trânsitos.
     ref.watch(passAlertsSchedulerProvider);
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Passagens de satélites')),
-      body: observer == null
-          ? const Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Text(
-                  'Defina sua localização (GPS ou um ponto no mapa) para '
-                  'calcular as passagens da ISS e da Tiangong.',
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            )
-          : RefreshIndicator(
-              onRefresh: () async => ref.refresh(upcomingPassesProvider.future),
-              child: passesAsync.when(
+    if (observer == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Passagens de satélites')),
+        body: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Text(
+              'Defina sua localização (GPS ou um ponto no mapa) para '
+              'calcular as passagens da ISS e da Tiangong.',
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Duas abas: VISÍVEIS (toda passagem que dá para ver/registrar a olho nu,
+    // com as que também são trânsito destacadas) e TRÂNSITOS (o planejador
+    // preciso de cruzamentos do Sol/Lua, com alertas).
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Passagens de satélites'),
+          bottom: const TabBar(
+            tabs: [
+              Tab(text: 'Visíveis'),
+              Tab(text: 'Trânsitos'),
+            ],
+          ),
+        ),
+        body: const TabBarView(
+          children: [
+            _VisiblePassesTab(),
+            _TransitsTab(),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Aba de TRÂNSITOS: o planejador preciso já existente (cruzamentos exatos do
+/// Sol/Lua no local ou numa faixa próxima), com o banner de alertas.
+class _TransitsTab extends ConsumerWidget {
+  const _TransitsTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final passesAsync = ref.watch(upcomingPassesProvider);
+    final alertsEnabled = ref.watch(alertsEnabledProvider);
+    return RefreshIndicator(
+      onRefresh: () async => ref.refresh(upcomingPassesProvider.future),
+      child: passesAsync.when(
                 loading: () =>
                     const Center(child: CircularProgressIndicator()),
                 error: (e, _) => ListView(
@@ -85,10 +122,213 @@ class PassesScreen extends ConsumerWidget {
                   );
                 },
               ),
-            ),
     );
   }
 }
+
+/// Aba de PASSAGENS VISÍVEIS: toda passagem em que a estação pode ser vista a
+/// olho nu (iluminada, observador no escuro) — para registrar/fotografar. As
+/// que também são trânsito do Sol/Lua recebem um selo de destaque.
+class _VisiblePassesTab extends ConsumerWidget {
+  const _VisiblePassesTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final passesAsync = ref.watch(visiblePassesProvider);
+    return RefreshIndicator(
+      onRefresh: () async => ref.refresh(visiblePassesProvider.future),
+      child: passesAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => ListView(
+          padding: const EdgeInsets.all(24),
+          children: [
+            Text(
+              'Falha ao calcular passagens: ${friendlyErrorMessage(e)}',
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        data: (response) {
+          final passes = response?.passes ?? const <VisiblePass>[];
+          if (passes.isEmpty) {
+            return ListView(
+              padding: const EdgeInsets.all(24),
+              children: const [
+                SizedBox(height: 48),
+                Icon(Icons.visibility_off_outlined,
+                    size: 48, color: AstroColors.telemetry),
+                SizedBox(height: 16),
+                Text(
+                  'Nenhuma passagem visível da ISS ou da Tiangong nos próximos '
+                  '2 dias.\n\nA estação só é visível quando está iluminada pelo '
+                  'Sol e o céu já está escuro (perto do amanhecer ou do '
+                  'anoitecer) — essas janelas vão e voltam a cada poucas '
+                  'semanas. Volte mais tarde ou tente outro dia.',
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            );
+          }
+          return ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: passes.length + 1,
+            separatorBuilder: (_, _) => const SizedBox(height: 10),
+            itemBuilder: (context, i) {
+              if (i == 0) return const _VisibleHeader();
+              return _VisiblePassCard(pass: passes[i - 1]);
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _VisibleHeader extends StatelessWidget {
+  const _VisibleHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: Row(
+          children: [
+            const Icon(Icons.photo_camera_outlined,
+                size: 20, color: AstroColors.info),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Passagens em que a estação aparece como um ponto brilhante '
+                'cruzando o céu. As marcadas com TRÂNSITO também passam na '
+                'frente do Sol ou da Lua.',
+                style: theme.textTheme.bodySmall,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _VisiblePassCard extends StatelessWidget {
+  final VisiblePass pass;
+
+  const _VisiblePassCard({required this.pass});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final start = pass.startUtc.toLocal();
+    final culm = pass.culminationUtc.toLocal();
+    final end = pass.endUtc.toLocal();
+    final durMin = (pass.durationS / 60).floor();
+    final durSec = (pass.durationS % 60).round();
+    final transitColor = pass.transitBody == CelestialBody.moon
+        ? AstroColors.moon
+        : AstroColors.sun;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.satellite_alt,
+                    color: AstroColors.satellite, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    pass.satelliteLabel,
+                    style: theme.textTheme.titleSmall,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                // Selo de destaque para passagens que também são trânsito —
+                // o mesmo realce dos aviões candidatos.
+                if (pass.isTransit)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: transitColor.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(999),
+                      border:
+                          Border.all(color: transitColor.withValues(alpha: 0.7)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          pass.transitBody == CelestialBody.moon
+                              ? Icons.nightlight_round
+                              : Icons.wb_sunny,
+                          size: 12,
+                          color: transitColor,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          pass.transitBody == CelestialBody.moon
+                              ? 'TRÂNSITO · LUA'
+                              : 'TRÂNSITO · SOL',
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w800,
+                            color: transitColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(_formatLocal(culm), style: theme.textTheme.titleMedium),
+            const SizedBox(height: 2),
+            Text(
+              'Começa ${_hm(start)} · auge ${_hm(culm)} · termina ${_hm(end)}',
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: AstroColors.telemetry),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 12,
+              runSpacing: 4,
+              children: [
+                _Fact(
+                  icon: Icons.height,
+                  text: 'auge ${pass.maxElevationDeg.toStringAsFixed(0)}°',
+                  highlight: pass.maxElevationDeg >= 40,
+                ),
+                _Fact(
+                  icon: Icons.brightness_5_outlined,
+                  text: 'mag ${pass.approxMagnitude.toStringAsFixed(1)}',
+                  highlight: pass.approxMagnitude <= 0.0,
+                ),
+                _Fact(
+                  icon: Icons.timelapse,
+                  text: durMin > 0 ? '${durMin}min ${durSec}s' : '${durSec}s',
+                ),
+                _Fact(
+                  icon: Icons.navigation_outlined,
+                  text: 'de ${compassLabel(pass.startAzimuthDeg)} para '
+                      '${compassLabel(pass.endAzimuthDeg)}',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _hm(DateTime local) => '${_two(local.hour)}:${_two(local.minute)}';
 
 class _AlertsBanner extends StatelessWidget {
   final bool enabled;

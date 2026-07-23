@@ -7,9 +7,20 @@ import '../../../core/providers.dart';
 import '../../../shared/models/celestial_position.dart';
 import '../data/passes_repository.dart';
 import 'satellite_pass.dart';
+import 'visible_pass.dart';
 
 final passesRepositoryProvider = Provider<PassesRepository>((ref) {
   return PassesRepository(ref.watch(apiClientProvider));
+});
+
+/// Passagens VISÍVEIS da estação (48 h) para o observador atual — o usuário
+/// pode registrá-las mesmo sem trânsito; as que são trânsito vêm destacadas.
+final visiblePassesProvider =
+    FutureProvider<VisiblePassesResponse?>((ref) async {
+  final observer = ref.watch(observerLocationProvider);
+  if (observer == null) return null;
+  final repo = ref.watch(passesRepositoryProvider);
+  return repo.visible(observer: observer);
 });
 
 /// Upcoming satellite transits (48 h, centerline within 30 km) for the current

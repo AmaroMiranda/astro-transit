@@ -221,6 +221,50 @@ class SatellitePassesOut(BaseModel):
     passes: list[SatellitePassOut]
 
 
+class VisiblePassOut(BaseModel):
+    """Uma passagem VISÍVEL da estação (a olho nu), para registro — mesmo sem
+    trânsito. `is_transit` marca as que também cruzam o Sol/Lua."""
+
+    satellite_id: str
+    satellite_label: str
+    start_utc: datetime
+    culmination_utc: datetime
+    end_utc: datetime
+    duration_s: float
+    max_elevation_deg: float
+    start_azimuth_deg: float
+    end_azimuth_deg: float
+    approx_magnitude: float
+    tle_age_hours: float
+    is_transit: bool
+    transit_body: Optional[CelestialBody] = None
+
+    @classmethod
+    def of(cls, p) -> "VisiblePassOut":
+        return cls(
+            satellite_id=p.satellite_id,
+            satellite_label=p.satellite_label,
+            start_utc=p.start_utc,
+            culmination_utc=p.culmination_utc,
+            end_utc=p.end_utc,
+            duration_s=p.duration_s,
+            max_elevation_deg=p.max_elevation_deg,
+            start_azimuth_deg=p.start_azimuth_deg,
+            end_azimuth_deg=p.end_azimuth_deg,
+            approx_magnitude=p.approx_magnitude,
+            tle_age_hours=p.tle_age_hours,
+            is_transit=p.is_transit,
+            transit_body=p.transit_body,
+        )
+
+
+class VisiblePassesOut(BaseModel):
+    generated_at_utc: datetime
+    hours: float
+    count: int
+    passes: list[VisiblePassOut]
+
+
 class AircraftOut(BaseModel):
     icao24: str
     callsign: Optional[str]

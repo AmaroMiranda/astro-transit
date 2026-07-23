@@ -98,6 +98,13 @@ class EphemerisService:
         """The shared Skyfield timescale (reused for satellite propagation)."""
         return self._ts
 
+    @property
+    def eph(self):
+        """The loaded JPL ephemeris (de421). Needed by callers that compute the
+        Earth's shadow — e.g. `EarthSatellite.at(t).is_sunlit(eph)` for visible
+        satellite passes."""
+        return self._eph
+
     def observer_site(self, observer: ObserverLocation):
         """The observer as a Skyfield geographic position (Earth-centred)."""
         return wgs84.latlon(
