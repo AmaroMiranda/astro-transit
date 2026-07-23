@@ -40,7 +40,13 @@ from app.domain.models import CelestialBody, ObserverLocation
 from app.prediction.satellite_transit import find_satellite_transit
 from app.services.passes_service import _segments  # reutiliza o detector de segmentos
 
-_COARSE_STEP_S = 30.0
+# Passo da grade grosseira: 90 s. Uma passagem visível dura vários MINUTOS
+# acima do horizonte, então 90 s a amostra de sobra (3-6 pontos por passagem) —
+# só a hora da culminação fica com precisão de ~±45 s, irrelevante para um
+# evento a olho nu. Era 30 s, mas no CPU estrangulado do free tier a varredura
+# de 10 dias × 2 satélites levava ~47 s e estourava o timeout do app (com o
+# cold-start junto): a causa do "falha no servidor sempre". 90 s corta ~3x.
+_COARSE_STEP_S = 90.0
 # Janela ampla (10 dias) como os preditores estabelecidos (Heavens-Above lista
 # ~10 dias): a ISS tem TEMPORADAS de visibilidade e uma janela curta esconde
 # passagens que estão a poucos dias — inútil para planejar. Diferente do
@@ -61,8 +67,10 @@ _SUN_ALT_MAX_DEG = 6.0
 # Gate angular para decidir se a passagem também é um trânsito (mesmo do
 # planejador: ~4° = corredor a ~40 km, "dirija até a linha").
 _TRANSIT_GATE_DEG = 4.0
-# Cache por local (as passagens de 10 dias não mudam de minuto a minuto).
-_CACHE_TTL_S = 300.0
+# Cache por local. As passagens são DETERMINÍSTICAS (dependem só do TLE, que
+# atualiza ~1x/dia), então guardar por 1 h é seguro e evita recomputar os 10
+# dias a cada visita — só a 1ª chamada por local/hora paga o cálculo.
+_CACHE_TTL_S = 3600.0
 
 
 @dataclass(frozen=True)
