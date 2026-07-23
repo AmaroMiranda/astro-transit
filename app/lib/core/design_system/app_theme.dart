@@ -122,10 +122,36 @@ class AppTheme {
   static TextStyle get _btnTextStyle => GoogleFonts.manrope(
       fontSize: 15, fontWeight: FontWeight.w700, height: 1.15);
 
+  // Geometria compartilhada por TODOS os botões (preenchido, contornado e de
+  // texto): mesma altura mínima (52), mesmo raio, mesmo padding e mesmo estilo
+  // de rótulo. Assim três botões lado a lado têm sempre a mesma altura — o
+  // TextButton não fica mais "baixinho" ao lado de um OutlinedButton (era a
+  // causa de "botões irregulares dependendo do texto"). O rótulo é centralizado
+  // e pode ir a 2 linhas em vez de ser aparado.
+  static const Size _btnMinSize = Size(64, 52);
+  static const EdgeInsets _btnPadding =
+      EdgeInsets.symmetric(horizontal: 20, vertical: 10);
+
   static FilledButtonThemeData _filledButtons() => FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          minimumSize: const Size(64, 52),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          minimumSize: _btnMinSize,
+          padding: _btnPadding,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AstroRadii.button),
+          ),
+          textStyle: _btnTextStyle,
+        ),
+      );
+
+  // TextButton não tinha tema: caía no padrão do Material (altura ~40, cantos e
+  // padding próprios), então ao lado de um OutlinedButton ficava menor e
+  // desalinhado. Agora segue o mesmo padrão dos demais.
+  static TextButtonThemeData _textButtons(Color foreground) =>
+      TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: foreground,
+          minimumSize: _btnMinSize,
+          padding: _btnPadding,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AstroRadii.button),
           ),
@@ -164,12 +190,12 @@ class AppTheme {
   static OutlinedButtonThemeData _outlinedButtons(Color side) =>
       OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          minimumSize: const Size(64, 52),
+          minimumSize: _btnMinSize,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AstroRadii.button),
           ),
           side: BorderSide(color: side),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          padding: _btnPadding,
           textStyle: _btnTextStyle,
         ),
       );
@@ -199,6 +225,7 @@ class AppTheme {
     cardTheme: _cardTheme(AstroColors.orbitalSurface, AstroColors.border),
     filledButtonTheme: _filledButtons(),
     outlinedButtonTheme: _outlinedButtons(const Color(0xFF2E4166)),
+    textButtonTheme: _textButtons(AstroColors.transitCyan),
     dividerTheme: const DividerThemeData(color: AstroColors.border, thickness: 1),
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: AstroColors.orbitalSurface,
@@ -231,6 +258,7 @@ class AppTheme {
     cardTheme: _cardTheme(Colors.white, const Color(0xFFDCE3F0)),
     filledButtonTheme: _filledButtons(),
     outlinedButtonTheme: _outlinedButtons(const Color(0xFFCBD5E6)),
+    textButtonTheme: _textButtons(const Color(0xFF0E6CA6)),
     appBarTheme: _appBar(_lightScheme),
   );
 
@@ -261,5 +289,6 @@ class AppTheme {
     cardTheme: _cardTheme(const Color(0xFF1A0707), const Color(0xFF3A1210)),
     filledButtonTheme: _filledButtons(),
     outlinedButtonTheme: _outlinedButtons(const Color(0xFF4A1613)),
+    textButtonTheme: _textButtons(const Color(0xFFE0564E)),
   );
 }

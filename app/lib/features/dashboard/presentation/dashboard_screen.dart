@@ -12,6 +12,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/design_system/app_theme.dart';
+import '../../../core/design_system/astro_button_bar.dart';
 import '../../../core/network/friendly_error.dart';
 import '../../../core/providers.dart';
 import '../../../core/utils/compass.dart';
@@ -412,17 +413,17 @@ class _MessageCard extends StatelessWidget {
             ),
             if (actionLabel != null || secondaryActionLabel != null) ...[
               const SizedBox(height: 16),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
+              AstroButtonBar(
+                buttons: [
                   if (actionLabel != null)
                     OutlinedButton(
-                        onPressed: onAction, child: Text(actionLabel!)),
+                        onPressed: onAction,
+                        child: Text(actionLabel!, textAlign: TextAlign.center)),
                   if (secondaryActionLabel != null)
                     TextButton(
                         onPressed: onSecondaryAction,
-                        child: Text(secondaryActionLabel!)),
+                        child: Text(secondaryActionLabel!,
+                            textAlign: TextAlign.center)),
                 ],
               ),
             ],
@@ -536,16 +537,13 @@ class _NextOpportunityCard extends StatelessWidget {
               ),
             ],
             const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: () => context.push('/live-tracking'),
-                    icon: const Icon(Icons.timer_outlined),
-                    label: const Text('Acompanhar'),
-                  ),
+            AstroButtonBar(
+              buttons: [
+                FilledButton.icon(
+                  onPressed: () => context.push('/live-tracking'),
+                  icon: const Icon(Icons.timer_outlined),
+                  label: const Text('Acompanhar'),
                 ),
-                const SizedBox(width: 8),
                 OutlinedButton.icon(
                   onPressed: () => context.push('/radar'),
                   icon: const Icon(Icons.radar),
@@ -664,10 +662,8 @@ class _NoEventCard extends StatelessWidget {
               ),
             ],
             const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
+            AstroButtonBar(
+              buttons: [
                 OutlinedButton.icon(
                   onPressed: () => context.push('/radar'),
                   icon: const Icon(Icons.radar),

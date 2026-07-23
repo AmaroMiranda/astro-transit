@@ -14,6 +14,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/camera/camera_calibration.dart';
 import '../../../core/design_system/app_theme.dart';
+import '../../../core/design_system/astro_button_bar.dart';
 import '../../../shared/models/celestial_position.dart';
 import '../../../shared/models/transit_prediction.dart';
 import '../../predictions/domain/prediction_providers.dart';
@@ -332,9 +333,16 @@ class _SolarSafetyGate extends StatelessWidget {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),
-              FilledButton(
-                onPressed: onAcknowledged,
-                child: const Text('Estou ciente e vou seguir as recomendações'),
+              AstroButtonBar(
+                buttons: [
+                  FilledButton(
+                    onPressed: onAcknowledged,
+                    child: const Text(
+                      'Estou ciente e vou seguir as recomendações',
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
