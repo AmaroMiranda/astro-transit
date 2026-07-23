@@ -29,11 +29,13 @@ class PassesRepository {
         'altitude_m': observer.altitudeM,
         'hours': hours,
       },
-      // A 1ª varredura de 10 dias no free tier leva ~1 min (CPU estrangulada);
-      // depois o backend cacheia e responde em ~0,4 s. O backend não trava mais
-      // durante o cálculo (roda em thread), então vale esperar em vez de
-      // desistir aos 30 s do timeout padrão e mostrar erro para o usuário.
-      options: Options(receiveTimeout: const Duration(seconds: 75)),
+      // A 1ª varredura de 10 dias no free tier leva ~33 s (CPU estrangulada,
+      // grade de 90 s); depois o backend cacheia por 1 h e responde em ~0,4 s.
+      // No pior caso o Render acorda do sono (~40 s de spin-up) e ainda calcula
+      // (~33 s), então damos 90 s de margem. O backend não trava durante o
+      // cálculo (roda em thread), então vale esperar em vez de desistir aos 30 s
+      // do timeout padrão e mostrar "falha no servidor" ao usuário.
+      options: Options(receiveTimeout: const Duration(seconds: 90)),
     );
     return VisiblePassesResponse.fromJson(
       response.data as Map<String, dynamic>,

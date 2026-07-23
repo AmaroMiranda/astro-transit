@@ -78,8 +78,7 @@ class _TransitsTab extends ConsumerWidget {
     return RefreshIndicator(
       onRefresh: () async => ref.refresh(upcomingPassesProvider.future),
       child: passesAsync.when(
-                loading: () =>
-                    const Center(child: CircularProgressIndicator()),
+                loading: () => const _PassesLoading(),
                 error: (e, _) => ListView(
                   padding: const EdgeInsets.all(24),
                   children: [
@@ -138,7 +137,7 @@ class _VisiblePassesTab extends ConsumerWidget {
     return RefreshIndicator(
       onRefresh: () async => ref.refresh(visiblePassesProvider.future),
       child: passesAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const _PassesLoading(),
         error: (e, _) => ListView(
           padding: const EdgeInsets.all(24),
           children: [
@@ -180,6 +179,44 @@ class _VisiblePassesTab extends ConsumerWidget {
             },
           );
         },
+      ),
+    );
+  }
+}
+
+/// Loading com texto — a 1ª varredura de 10 dias no servidor gratuito pode
+/// levar até ~1 min (calcula posição e iluminação da estação minuto a minuto).
+/// Sem esse aviso, o spinner sozinho parece travamento e o usuário lê como
+/// "falha no servidor".
+class _PassesLoading extends StatelessWidget {
+  const _PassesLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 20),
+            Text(
+              'Calculando as passagens dos próximos 10 dias…',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'O primeiro cálculo pode levar até 1 minuto. Depois fica '
+              'instantâneo.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: AstroColors.telemetry),
+            ),
+          ],
+        ),
       ),
     );
   }
