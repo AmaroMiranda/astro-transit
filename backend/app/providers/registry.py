@@ -53,6 +53,15 @@ class ProviderRegistry:
     cache_ttl_s: float = 5.0
     stale_after_s: float = 20.0
     retry_delay_s: float = 0.4
+    # Quando True, consulta TODOS os provedores em paralelo e UNE os resultados
+    # por ICAO24 (o estado mais recente de cada avião vence), em vez de usar só
+    # o primeiro que responde. Cada provedor agrega feeders diferentes, então a
+    # união amplia a cobertura para o conjunto de todos os feeders — foi o que
+    # motivou isto: um jato comercial (que sempre transmite ADS-B) foi avistado
+    # sem aparecer no radar porque estava num buraco de cobertura de UM
+    # provedor. Failover sequencial continua sendo o fallback se a mesclagem
+    # não render nada.
+    merge_providers: bool = True
     _cache: dict[str, _CacheEntry] = field(default_factory=dict)
 
     @staticmethod
@@ -85,6 +94,17 @@ class ProviderRegistry:
                 from_cache=False,
                 degraded=True,
             )
+
+        # 0) Merge mode: query every provider in parallel and union by ICAO24.
+        if self.merge_providers and len(self.providers) > 1:
+            merged = await self._merged_fetch(lat_deg, lon_deg, radius_km)
+            if merged is not None:
+                return self._store(
+                    key, merged.aircraft, merged.provider_name,
+                    degraded=merged.degraded,
+                )
+            # else: every provider failed — fall through to the sequential path,
+            # which can still serve a stale cache before giving up.
 
         primary, *secondaries = self.providers
 
@@ -123,6 +143,45 @@ class ProviderRegistry:
             fetched_at_utc=datetime.now(timezone.utc),
             from_cache=False,
             degraded=True,
+        )
+
+    async def _merged_fetch(
+        self, lat_deg: float, lon_deg: float, radius_km: float
+    ) -> Optional[AircraftFetchResult]:
+        """Consulta todos os provedores em paralelo e une por ICAO24.
+
+        Retorna None só se TODOS falharem (o chamador então tenta o caminho
+        sequencial + cache). Um provedor que falha ou estoura o timeout é
+        ignorado — os que responderem ainda contribuem. Para cada avião visto
+        por mais de um provedor, vence o estado com ``timestamp_utc`` mais
+        recente (posição menos defasada). `degraded=True` se algum provedor
+        ficou de fora, para o cliente saber que a cobertura pode estar parcial.
+        """
+        results = await asyncio.gather(
+            *(p.get_aircraft_near(lat_deg, lon_deg, radius_km) for p in self.providers),
+            return_exceptions=True,
+        )
+        by_icao: dict[str, AircraftState] = {}
+        contributing: list[str] = []
+        any_failed = False
+        for provider, res in zip(self.providers, results):
+            if isinstance(res, BaseException):
+                any_failed = True
+                continue
+            contributing.append(provider.name)
+            for a in res:
+                prev = by_icao.get(a.icao24)
+                if prev is None or a.timestamp_utc > prev.timestamp_utc:
+                    by_icao[a.icao24] = a
+        if not contributing:
+            return None
+        name = "+".join(contributing) if len(contributing) > 1 else contributing[0]
+        return AircraftFetchResult(
+            aircraft=list(by_icao.values()),
+            provider_name=name,
+            fetched_at_utc=datetime.now(timezone.utc),
+            from_cache=False,
+            degraded=any_failed,
         )
 
     def _store(

@@ -109,15 +109,55 @@ class AppTheme {
         ),
       );
 
-  // Primary buttons: min height 52, radius 16, weight 700, never wrap.
+  // Botões primários: altura MÍNIMA 52 (não fixa), raio 16, peso 700.
+  //
+  // `minimumSize` com altura fixa + rótulo longo = texto cortado, que é o
+  // "texto quebrando nos botões" relatado. A correção tem duas partes:
+  //   1. o rótulo pode ocupar 2 linhas, centralizado (softWrap real) em vez de
+  //      ser aparado;
+  //   2. o botão cresce em altura para caber (`tapTargetSize` + padding
+  //      vertical), então nunca corta.
+  // Ainda assim, o certo é o CHAMADOR encurtar rótulos — isto é a rede de
+  // segurança para telas estreitas e fonte grande, não licença para textão.
+  static TextStyle get _btnTextStyle => GoogleFonts.manrope(
+      fontSize: 15, fontWeight: FontWeight.w700, height: 1.15);
+
   static FilledButtonThemeData _filledButtons() => FilledButtonThemeData(
         style: FilledButton.styleFrom(
           minimumSize: const Size(64, 52),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AstroRadii.button),
           ),
-          textStyle: GoogleFonts.manrope(
-              fontSize: 15, fontWeight: FontWeight.w700),
+          textStyle: _btnTextStyle,
+        ),
+      );
+
+  /// AppBar derivada do ColorScheme, para os TRÊS temas.
+  ///
+  /// Antes cada tema escrevia a cor do título na mão (e o tema de visão
+  /// noturna não declarava appBarTheme nenhum, caindo no padrão do Material —
+  /// por isso a barra "não mudava de cor com o tema"). Derivar de
+  /// `onSurface`/`surface` faz valer a regra do design system: mexer no token
+  /// propaga para todas as telas.
+  ///
+  /// `surfaceTintColor` fica transparente de propósito: no Material 3 a barra
+  /// ganha um tingimento automático quando o conteúdo rola por baixo dela, e
+  /// esse tingimento é calculado sobre o primário — numa paleta escura ele
+  /// aparece como uma faixa clara que não pertence a nenhum dos temas.
+  static AppBarTheme _appBar(ColorScheme scheme) => AppBarTheme(
+        backgroundColor: scheme.surface,
+        foregroundColor: scheme.onSurface,
+        surfaceTintColor: Colors.transparent,
+        scrolledUnderElevation: 0,
+        elevation: 0,
+        centerTitle: false,
+        iconTheme: IconThemeData(color: scheme.onSurface),
+        actionsIconTheme: IconThemeData(color: scheme.onSurface),
+        titleTextStyle: GoogleFonts.manrope(
+          fontSize: 20,
+          fontWeight: FontWeight.w800,
+          color: scheme.onSurface,
         ),
       );
 
@@ -129,8 +169,8 @@ class AppTheme {
             borderRadius: BorderRadius.circular(AstroRadii.button),
           ),
           side: BorderSide(color: side),
-          textStyle: GoogleFonts.manrope(
-              fontSize: 15, fontWeight: FontWeight.w700),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          textStyle: _btnTextStyle,
         ),
       );
 
@@ -167,16 +207,7 @@ class AppTheme {
         GoogleFonts.manrope(fontSize: 12, fontWeight: FontWeight.w600),
       ),
     ),
-    appBarTheme: AppBarTheme(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      centerTitle: false,
-      titleTextStyle: GoogleFonts.manrope(
-        fontSize: 20,
-        fontWeight: FontWeight.w800,
-        color: const Color(0xFFEAF0FF),
-      ),
-    ),
+    appBarTheme: _appBar(_darkScheme),
   );
 
   // ----------------------------------------------------------------- light ---
@@ -200,16 +231,7 @@ class AppTheme {
     cardTheme: _cardTheme(Colors.white, const Color(0xFFDCE3F0)),
     filledButtonTheme: _filledButtons(),
     outlinedButtonTheme: _outlinedButtons(const Color(0xFFCBD5E6)),
-    appBarTheme: AppBarTheme(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      centerTitle: false,
-      titleTextStyle: GoogleFonts.manrope(
-        fontSize: 20,
-        fontWeight: FontWeight.w800,
-        color: const Color(0xFF0B1B2E),
-      ),
-    ),
+    appBarTheme: _appBar(_lightScheme),
   );
 
   // ------------------------------------------------------------------- red ---

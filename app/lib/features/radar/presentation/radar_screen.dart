@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/design_system/app_theme.dart';
 import '../../../core/providers.dart';
+import '../../../core/utils/geo.dart';
 import '../../map/domain/aircraft_providers.dart';
 import '../../predictions/domain/prediction_providers.dart';
 import '../../../shared/models/aircraft_state.dart';
@@ -66,6 +67,8 @@ class RadarScreen extends ConsumerWidget {
                           aircraft: aircraft,
                           predictions: predictions,
                           candidateIcaos: candidateIcaos,
+                          observerLat: observer.latitude,
+                          observerLon: observer.longitude,
                         ),
                       ),
                     ),
@@ -100,13 +103,76 @@ class _RadarPainter extends CustomPainter {
   final List<AircraftState> aircraft;
   final List<TransitPrediction> predictions;
   final Set<String> candidateIcaos;
+  final double observerLat;
+  final double observerLon;
 
   _RadarPainter({
     required this.bodies,
     required this.aircraft,
     required this.predictions,
     required this.candidateIcaos,
+    required this.observerLat,
+    required this.observerLon,
   });
+
+  static String _shortId(AircraftState a) =>
+      a.callsign ?? a.icao24.toUpperCase();
+
+  /// Etiqueta do ID desenhada logo abaixo do avião no radar.
+  void _paintIdLabel(Canvas canvas, Offset pos, String text, Color color) {
+    final tp = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          color: color,
+          fontSize: 9,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    // Fundo semitransparente para legibilidade sobre o gradiente do radar.
+    final bg = Rect.fromLTWH(
+        pos.dx - tp.width / 2 - 3, pos.dy + 11, tp.width + 6, tp.height + 2);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(bg, const Radius.circular(3)),
+      Paint()..color = Colors.black.withValues(alpha: 0.5),
+    );
+    tp.paint(canvas, Offset(pos.dx - tp.width / 2, pos.dy + 12));
+  }
+
+  /// Trajetória APARENTE de uma aeronave candidata projetada na cúpula do céu.
+  ///
+  /// O rumo (track) é sobre o SOLO; a direção em que o avião se move pelo CÉU
+  /// depende de onde ele está em relação ao observador. Então: extrapolamos a
+  /// posição no solo em rumo constante e reprojetamos cada ponto para
+  /// azimute/altitude topocêntricos.
+  ///
+  /// AUTOVALIDAÇÃO: o backend já nos dá o az/alt ATUAL da aeronave. Recalculamos
+  /// o az/alt da posição atual com a MESMA fórmula; se não bater (erro > 2°), a
+  /// fórmula não é confiável para este ponto e devolvemos null — melhor não
+  /// desenhar do que desenhar um traço errado.
+  List<(double, double)>? _skyTrajectory(AircraftState a) {
+    final refAz = a.azimuthDeg, refAlt = a.altitudeDeg;
+    if (refAz == null || refAlt == null) return null;
+    final check = _topocentric(a.latitude, a.longitude, a.altitudeM);
+    final azErr = ((check.$1 - refAz + 540) % 360) - 180;
+    if (azErr.abs() > 2.0 || (check.$2 - refAlt).abs() > 2.0) return null;
+
+    final out = <(double, double)>[(refAz, refAlt)];
+    for (var i = 1; i <= 5; i++) {
+      final g = destinationPoint(
+          a.latitude, a.longitude, a.trackDeg, 12.0 * i); // 12 km/passo
+      final p = topocentric(
+          observerLat, observerLon, g.$1, g.$2, a.altitudeM);
+      if (p.$2 < 0) break; // desceu abaixo do horizonte
+      out.add(p);
+    }
+    return out;
+  }
+
+  (double, double) _topocentric(double lat, double lon, double altM) =>
+      topocentric(observerLat, observerLon, lat, lon, altM);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -134,17 +200,41 @@ class _RadarPainter extends CustomPainter {
     // candidates highlighted (drawn on top).
     for (final a in aircraft) {
       if (candidateIcaos.contains(a.icao24)) continue;
+      final pos = _project(center, radius, a.azimuthDeg!, a.altitudeDeg!);
       paintPlane(
         canvas,
-        _project(center, radius, a.azimuthDeg!, a.altitudeDeg!),
+        pos,
         headingDeg: a.trackDeg,
         color: AstroColors.aircraftCommon,
         size: 15,
       );
+      _paintIdLabel(canvas, pos, _shortId(a), const Color(0xFF8CA0BE));
     }
     for (final a in aircraft) {
       if (!candidateIcaos.contains(a.icao24)) continue;
       final pos = _project(center, radius, a.azimuthDeg!, a.altitudeDeg!);
+      // Trajetória aparente no céu: projeta posições futuras (rumo constante)
+      // para az/alt e liga os pontos. Só é desenhada se a fórmula topocêntrica
+      // reproduzir o az/alt ATUAL que o backend já forneceu — do contrário
+      // seria um traço enganoso, e aí não desenhamos nada (ver _skyTrajectory).
+      final traj = _skyTrajectory(a);
+      if (traj != null && traj.length >= 2) {
+        final path = Path()
+          ..moveTo(_project(center, radius, traj.first.$1, traj.first.$2).dx,
+              _project(center, radius, traj.first.$1, traj.first.$2).dy);
+        for (final t in traj.skip(1)) {
+          final p = _project(center, radius, t.$1, t.$2);
+          path.lineTo(p.dx, p.dy);
+        }
+        canvas.drawPath(
+          path,
+          Paint()
+            ..color = AstroColors.aircraftCandidate.withValues(alpha: 0.7)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2
+            ..strokeCap = StrokeCap.round,
+        );
+      }
       canvas.drawCircle(
         pos,
         13,
@@ -159,6 +249,7 @@ class _RadarPainter extends CustomPainter {
         color: AstroColors.aircraftCandidate,
         size: 20,
       );
+      _paintIdLabel(canvas, pos, _shortId(a), AstroColors.aircraftCandidate);
     }
 
     // Satellites (ISS/Tiangong) and any candidate without a live ADS-B fix are
@@ -258,16 +349,37 @@ class _RadarPainter extends CustomPainter {
       );
     }
 
-    // Observer marker (zenith) at the centre.
-    canvas.drawCircle(center, 3.4, Paint()..color = Colors.white70);
+    // Indicador do OBSERVADOR (você), no centro = zênite. Antes era um
+    // pontinho branco de 3px, fácil de confundir com o cruzamento dos eixos;
+    // o usuário pediu um indicador claro de "onde estou". Agora: ponto ciano
+    // com halo e a etiqueta "Você" logo abaixo.
     canvas.drawCircle(
       center,
-      6.5,
+      9,
       Paint()
-        ..color = Colors.white24
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1,
+        ..color = AstroColors.transitCyan.withValues(alpha: 0.22),
     );
+    canvas.drawCircle(center, 4.5, Paint()..color = AstroColors.transitCyan);
+    canvas.drawCircle(
+      center,
+      4.5,
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.85)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2,
+    );
+    final tp = TextPainter(
+      text: const TextSpan(
+        text: 'Você',
+        style: TextStyle(
+          color: AstroColors.transitCyan,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(canvas, center + Offset(-tp.width / 2, 10));
   }
 
   static const _compassLabels = [(0.0, 'N'), (90.0, 'L'), (180.0, 'S'), (270.0, 'O')];

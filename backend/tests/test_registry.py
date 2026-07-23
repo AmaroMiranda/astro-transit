@@ -72,10 +72,15 @@ async def test_retry_recovers_primary_without_secondary():
 
 @pytest.mark.asyncio
 async def test_falls_back_to_secondary_when_primary_fails():
+    # Caminho SEQUENCIAL (merge desligado): quando o primário falha, o
+    # secundário assume. Fixado em merge_providers=False de propósito — este
+    # teste exercita o fallback, que continua existindo por baixo da mesclagem.
     primary = FakeProvider([], healthy=False)
     secondary = FakeProvider([_ac("secondary_ac")])
     secondary.name = "secondary"
-    registry = ProviderRegistry(providers=[primary, secondary], retry_delay_s=0.01)
+    registry = ProviderRegistry(
+        providers=[primary, secondary], retry_delay_s=0.01, merge_providers=False
+    )
 
     result = await registry.get_aircraft_near(0.0, 0.0, 50.0)
     assert result.degraded
@@ -85,10 +90,15 @@ async def test_falls_back_to_secondary_when_primary_fails():
 
 @pytest.mark.asyncio
 async def test_stale_cache_used_before_secondary_within_window():
+    # Também um contrato do caminho sequencial (cache velho antes do
+    # secundário). Com a mesclagem LIGADA o comportamento é melhor — dado
+    # fresco do secundário em vez de cache velho —, coberto por
+    # test_merge_serves_fresh_secondary_instead_of_stale_cache abaixo.
     primary = FakeProvider([_ac()])
     secondary = FakeProvider([_ac("should_not_be_used")])
     registry = ProviderRegistry(
-        providers=[primary, secondary], cache_ttl_s=0.0, stale_after_s=60.0, retry_delay_s=0.01
+        providers=[primary, secondary], cache_ttl_s=0.0, stale_after_s=60.0,
+        retry_delay_s=0.01, merge_providers=False,
     )
     first = await registry.get_aircraft_near(0.0, 0.0, 50.0)
     assert first.provider_name == "fake"
@@ -146,3 +156,80 @@ async def test_cache_does_not_grow_unbounded_across_distinct_locations():
     # Every earlier entry should have expired past stale_after_s by the time
     # later ones are stored, so the cache shouldn't accumulate all 20 keys.
     assert len(registry._cache) < 20
+
+
+# --- Mesclagem de provedores (cobertura pela união dos feeders) --------------
+
+from datetime import datetime, timedelta, timezone  # noqa: E402
+
+
+def _ac_at(icao: str, ts: datetime, lat: float = 1.0) -> AircraftState:
+    return AircraftState(
+        icao24=icao,
+        latitude_deg=lat,
+        longitude_deg=2.0,
+        geometric_altitude_m=10_000.0,
+        ground_speed_mps=200.0,
+        track_deg=90.0,
+        timestamp_utc=ts,
+    )
+
+
+@pytest.mark.asyncio
+async def test_merge_unions_aircraft_from_all_providers():
+    # O ponto central da feature: cada provedor vê aviões diferentes, e a
+    # mesclagem entrega a UNIÃO — o avião que só o provedor B captou (o buraco
+    # de cobertura que motivou tudo) passa a aparecer.
+    a = FakeProvider([_ac("only_in_a")])
+    a.name = "a"
+    b = FakeProvider([_ac("only_in_b")])
+    b.name = "b"
+    registry = ProviderRegistry(providers=[a, b], cache_ttl_s=0.0)
+
+    result = await registry.get_aircraft_near(0.0, 0.0, 50.0)
+    icaos = {ac.icao24 for ac in result.aircraft}
+    assert icaos == {"only_in_a", "only_in_b"}
+    assert not result.degraded  # os dois responderam
+    assert "a" in result.provider_name and "b" in result.provider_name
+
+
+@pytest.mark.asyncio
+async def test_merge_keeps_the_most_recent_state_for_a_shared_aircraft():
+    # Mesmo avião em dois provedores: vence o timestamp mais novo (posição
+    # menos defasada).
+    old = datetime.now(timezone.utc) - timedelta(seconds=30)
+    new = datetime.now(timezone.utc)
+    stale = FakeProvider([_ac_at("shared", old, lat=1.0)])
+    stale.name = "stale"
+    fresh = FakeProvider([_ac_at("shared", new, lat=9.0)])
+    fresh.name = "fresh"
+    registry = ProviderRegistry(providers=[stale, fresh], cache_ttl_s=0.0)
+
+    result = await registry.get_aircraft_near(0.0, 0.0, 50.0)
+    assert len(result.aircraft) == 1
+    assert result.aircraft[0].latitude_deg == 9.0  # o estado fresco
+
+
+@pytest.mark.asyncio
+async def test_merge_tolerates_one_provider_failing():
+    good = FakeProvider([_ac("from_good")])
+    good.name = "good"
+    bad = FakeProvider([], healthy=False)
+    bad.name = "bad"
+    registry = ProviderRegistry(providers=[good, bad], cache_ttl_s=0.0)
+
+    result = await registry.get_aircraft_near(0.0, 0.0, 50.0)
+    assert {ac.icao24 for ac in result.aircraft} == {"from_good"}
+    assert result.degraded  # um provedor ficou de fora → cobertura parcial
+    assert result.provider_name == "good"
+
+
+@pytest.mark.asyncio
+async def test_merge_all_failing_falls_through_to_sequential_then_empty():
+    a = FakeProvider([], healthy=False)
+    b = FakeProvider([], healthy=False)
+    registry = ProviderRegistry(providers=[a, b], cache_ttl_s=0.0, retry_delay_s=0.01)
+
+    result = await registry.get_aircraft_near(0.0, 0.0, 50.0)
+    assert result.aircraft == []
+    assert result.degraded
