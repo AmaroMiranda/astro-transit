@@ -14,6 +14,13 @@ import '../data/aircraft_repository.dart';
 
 const _kPollInterval = Duration(seconds: 6);
 
+/// Quanto tempo uma aeronave continua no radar depois de sumir de um poll.
+/// Cobre ~2 ciclos e meio de polling: absorve o jitter natural de cobertura
+/// ADS-B e polls degradados (um provedor que estourou o timeout, ou uma falha
+/// de rede transitória) sem o alvo piscar. Um avião só some de vez se ficar
+/// ausente por TODO esse intervalo.
+const _kTrackTtl = Duration(seconds: 15);
+
 final aircraftRepositoryProvider = Provider<AircraftRepository>((ref) {
   return AircraftRepository(ref.watch(apiClientProvider));
 });
@@ -30,10 +37,17 @@ final aircraftPhotoProvider =
   return ref.watch(aircraftPhotoRepositoryProvider).byIcao24(icao24);
 });
 
-/// Aircraft near the current observer, refreshed every few seconds. Emits an
-/// empty list (rather than an error state) on a transient network failure so
-/// the map doesn't flash an error every time one poll is slow — the next
-/// poll just tries again.
+/// Aircraft near the current observer, refreshed every few seconds.
+///
+/// Usa "coasting" de alvos (padrão de radar): mantemos o último estado de cada
+/// aeronave por [_kTrackTtl] após vê-la pela última vez. Assim, um avião que
+/// some de UM poll — por falha de rede transitória, provedor degradado, ou um
+/// buraco momentâneo de cobertura ADS-B — NÃO pisca no mapa/radar; ele só
+/// desaparece se ficar ausente por todo o TTL.
+///
+/// Isto corrige o bug do "avião aparecendo e sumindo": antes, qualquer poll
+/// lento/falho fazia `yield []`, apagando TODAS as aeronaves por um ciclo até
+/// o próximo poll bem-sucedido trazê-las de volta.
 final nearbyAircraftProvider =
     StreamProvider.autoDispose<List<AircraftState>>((ref) async* {
   final repo = ref.watch(aircraftRepositoryProvider);
@@ -45,6 +59,9 @@ final nearbyAircraftProvider =
     return;
   }
 
+  // icao24 -> (último estado conhecido, instante em que foi visto).
+  final tracks = <String, ({AircraftState state, DateTime seen})>{};
+
   while (true) {
     try {
       final result = await repo.nearby(
@@ -52,10 +69,21 @@ final nearbyAircraftProvider =
         longitude: observer.longitude,
         radiusKm: radiusKm,
       );
-      yield result.aircraft;
+      final now = DateTime.now();
+      for (final a in result.aircraft) {
+        tracks[a.icao24] = (state: a, seen: now);
+      }
     } catch (_) {
-      yield const [];
+      // Poll transitório falhou: NÃO apagamos os alvos. Eles seguem no radar
+      // com a última posição conhecida e envelhecem pelo TTL abaixo.
     }
+
+    // Remove alvos ausentes há mais que o TTL (também esvazia o radar de vez
+    // se o backend ficar realmente indisponível por > _kTrackTtl).
+    final cutoff = DateTime.now().subtract(_kTrackTtl);
+    tracks.removeWhere((_, t) => t.seen.isBefore(cutoff));
+
+    yield tracks.values.map((t) => t.state).toList();
     await Future<void>.delayed(_kPollInterval);
   }
 });
