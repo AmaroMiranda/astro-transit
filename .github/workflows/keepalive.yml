@@ -1,15 +1,32 @@
 # Mantém o backend do Render (free tier) acordado: o serviço hiberna após
-# ~15 min sem tráfego, e o primeiro acesso depois disso demora ~30-50s. Este
-# workflow bate no /health a cada ~10 min para evitar isso.
-# Obs: manter acordado 24/7 consome ~720 das 750 horas/mês gratuitas do Render.
+# ~15 min sem tráfego, e o primeiro acesso depois disso demora ~30-50s.
+#
+# ATENÇÃO: o cron do GitHub Actions é BEST-EFFORT — ele atrasa e às vezes pula
+# execuções sob carga, então um intervalo "de 5 min" pode virar 20-40 min na
+# prática e deixar o Render dormir mesmo assim. Por isso este workflow é só uma
+# REDE DE SEGURANÇA. Para um ping confiável de 2 min, use o cron-job.org
+# (grátis) apontando para https://astrotransit-backend.onrender.com/health.
+#
+# 5 min é o intervalo mínimo aceito pelo GitHub (*/2 não funciona aqui).
+# Obs: manter o serviço acordado 24/7 consome ~720 das 750 horas/mês gratuitas
+# do Render, que são COMPARTILHADAS entre seus serviços free (pode afetar outros
+# apps na mesma conta).
 name: keep-alive
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch:
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
       - name: ping /health
-        run: curl -fsS --max-time 90 https://astrotransit-backend.onrender.com/health || true
+        run: |
+          url="https://astrotransit-backend.onrender.com/health"
+          for i in 1 2 3; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 90 "$url" || echo 000)
+            if [ "$code" = "200" ]; then echo "ok ($code)"; exit 0; fi
+            echo "tentativa $i: HTTP $code (pode ser cold start)"; sleep 15
+          done
+          # Não falha o job: evita spam de e-mail por falha transitória.
+          echo "sem 200 após 3 tentativas"; exit 0
